@@ -10,7 +10,7 @@ Esta fase estabelece o baseline técnico de segurança do Portal de Turismo Muni
 | --- | --- | --- |
 | Sessão absoluta | Tokens OAuth locais passam a expirar em 12 horas | Reduz exposição de sessões administrativas esquecidas |
 | Cookie de sessão | `HttpOnly`; `SameSite=None` somente em HTTPS; `Lax` em HTTP local | Evita cookies rejeitados em desenvolvimento e reduz risco de envio cross-site |
-| Headers HTTP | `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, CSP de framing e HSTS em HTTPS | Diminui riscos comuns de clickjacking, MIME sniffing e vazamento de referrer |
+| Headers HTTP | `X-Content-Type-Options`, CSP de framing restrita aos hosts oficiais, `Referrer-Policy`, `Permissions-Policy` e HSTS em HTTPS | Diminui riscos comuns de clickjacking, MIME sniffing e vazamento de referrer sem bloquear a pré-visualização institucional |
 | Superfície Express | `X-Powered-By` desabilitado e body parser limitado a 8 MB | Reduz exposição de tecnologia e consumo abusivo de memória |
 | Uploads | MIME permitido por lista, assinatura binária verificada, limite de 5 MB e limite de 30 imagens por galeria | Impede extensão enganosa, conteúdo incompatível e crescimento sem controle |
 | Isolamento de tenant | Uploads precisam apontar para local/evento existente no município autenticado | Evita anexação de conteúdo em entidade de outro município |
