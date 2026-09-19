@@ -6,6 +6,9 @@ import Attendance from "@/pages/Attendance";
 import Itineraries from "@/pages/Itineraries";
 import ItineraryDetail from "@/pages/ItineraryDetail";
 import InviteAccept from "@/pages/InviteAccept";
+import PlaceDetail from "@/pages/PlaceDetail";
+import EventDetail from "@/pages/EventDetail";
+import Events from "@/pages/Events";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -17,6 +20,9 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/admin" component={Admin} />
       <Route path="/presenca/:code" component={Attendance} />
+      <Route path="/locais/:id" component={PlaceDetail} />
+      <Route path="/eventos" component={Events} />
+      <Route path="/eventos/:id" component={EventDetail} />
       <Route path="/roteiros" component={Itineraries} />
       <Route path="/roteiros/:id" component={ItineraryDetail} />
       <Route path="/convites/:token" component={InviteAccept} />

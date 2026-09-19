@@ -13,6 +13,8 @@ import {
   createItinerary,
   getDefaultTenant,
   getDashboardStats,
+  getPublishedEvent,
+  getPublishedPlace,
   getItinerary,
   getInvitationByToken,
   getQrCode,
@@ -24,6 +26,8 @@ import {
   listCategories,
   listPendingSubmissions,
   listPublishedPlaces,
+  listPublicMedia,
+  listMapPoints,
   listQrCodes,
   listItineraries,
   listActiveTenants,
@@ -91,6 +95,9 @@ export const appRouter = router({
   catalog: router({
     list: publicProcedure.input(defaultTenantInput.extend({ categoryId: z.number().int().positive().optional() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); return { tenant, categories: await listCategories(tenant.id), places: await listPublishedPlaces(tenant.id, input.categoryId) }; }),
     events: publicProcedure.input(defaultTenantInput.extend({ limit: z.number().int().min(1).max(100).optional() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); return { tenant, events: await listUpcomingEvents(tenant.id, input.limit ?? 20) }; }),
+    place: publicProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); const place = await getPublishedPlace(input.id, tenant.id); if (!place) throw new TRPCError({ code: "NOT_FOUND", message: "Local não encontrado." }); return { place, media: await listPublicMedia("place", place.id, tenant.id) }; }),
+    event: publicProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); const event = await getPublishedEvent(input.id, tenant.id); if (!event) throw new TRPCError({ code: "NOT_FOUND", message: "Evento não encontrado." }); return { event, media: await listPublicMedia("event", event.id, tenant.id) }; }),
+    map: publicProcedure.input(defaultTenantInput).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); return { tenant, ...await listMapPoints(tenant.id) }; }),
   }),
 
   itineraries: router({

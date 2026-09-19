@@ -96,6 +96,36 @@ export async function listPublishedPlaces(tenantId: number, categoryId?: number)
   return db.select().from(places).where(and(...filters)).orderBy(asc(places.name));
 }
 
+export async function getPublishedPlace(id: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(places).where(and(eq(places.id, id), eq(places.tenantId, tenantId), eq(places.status, "approved"))).limit(1);
+  return result[0];
+}
+
+export async function getPublishedEvent(id: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(events).where(and(eq(events.id, id), eq(events.tenantId, tenantId), eq(events.status, "approved"))).limit(1);
+  return result[0];
+}
+
+export async function listPublicMedia(entityType: "place" | "event", entityId: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: media.id, url: media.url, altText: media.altText, mimeType: media.mimeType }).from(media).where(and(eq(media.entityType, entityType), eq(media.entityId, entityId), eq(media.tenantId, tenantId))).orderBy(asc(media.createdAt));
+}
+
+export async function listMapPoints(tenantId: number) {
+  const db = await getDb();
+  if (!db) return { places: [], events: [] };
+  const [placePoints, eventPoints] = await Promise.all([
+    db.select({ id: places.id, name: places.name, type: places.type, latitude: places.latitude, longitude: places.longitude }).from(places).where(and(eq(places.tenantId, tenantId), eq(places.status, "approved"), sql`${places.latitude} IS NOT NULL`, sql`${places.longitude} IS NOT NULL`)).orderBy(asc(places.name)),
+    db.select({ id: events.id, title: events.title, startsAt: events.startsAt, latitude: events.latitude, longitude: events.longitude }).from(events).where(and(eq(events.tenantId, tenantId), eq(events.status, "approved"), gte(events.startsAt, new Date()), sql`${events.latitude} IS NOT NULL`, sql`${events.longitude} IS NOT NULL`)).orderBy(asc(events.startsAt)),
+  ]);
+  return { places: placePoints, events: eventPoints };
+}
+
 export async function listCategories(tenantId: number) {
   const db = await getDb();
   if (!db) return [];

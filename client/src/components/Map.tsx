@@ -76,7 +76,7 @@
 
 /// <reference types="@types/google.maps" />
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePersistFn } from "@/hooks/usePersistFn";
 import { cn } from "@/lib/utils";
 
@@ -114,6 +114,7 @@ interface MapViewProps {
   initialCenter?: google.maps.LatLngLiteral;
   initialZoom?: number;
   onMapReady?: (map: google.maps.Map) => void;
+  markers?: Array<{ id: string | number; position: google.maps.LatLngLiteral; title: string }>;
 }
 
 export function MapView({
@@ -121,9 +122,12 @@ export function MapView({
   initialCenter = { lat: 37.7749, lng: -122.4194 },
   initialZoom = 12,
   onMapReady,
+  markers = [],
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
+  const markerRefs = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const [ready, setReady] = useState(false);
 
   const init = usePersistFn(async () => {
     await loadMapScript();
@@ -143,11 +147,19 @@ export function MapView({
     if (onMapReady) {
       onMapReady(map.current);
     }
+    setReady(true);
   });
 
   useEffect(() => {
     init();
   }, [init]);
+
+  useEffect(() => {
+    if (!map.current || !window.google?.maps?.marker) return;
+    markerRefs.current.forEach((marker) => { marker.map = null; });
+    markerRefs.current = markers.map((item) => new google.maps.marker.AdvancedMarkerElement({ map: map.current, position: item.position, title: item.title }));
+    return () => { markerRefs.current.forEach((marker) => { marker.map = null; }); };
+  }, [markers, ready]);
 
   return (
     <div ref={mapContainer} className={cn("w-full h-[500px]", className)} />
