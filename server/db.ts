@@ -12,6 +12,8 @@ import {
   media,
   qrCodes,
   places,
+  reviews,
+  comments,
   submissions,
   tenants,
   users,
@@ -156,17 +158,60 @@ export async function listPendingSubmissions(tenantId: number) {
   return db.select().from(submissions).where(and(eq(submissions.tenantId, tenantId), eq(submissions.status, "pending"))).orderBy(desc(submissions.createdAt)).limit(50);
 }
 
-export async function createSubmission(input: { tenantId: number; submittedBy: number; entityType: "place" | "event" | "review" | "comment" | "photo"; payload: string }) {
+export async function createSubmission(input: { tenantId: number; submittedBy: number; entityType: "place" | "event" | "review" | "comment" | "photo"; entityId?: number; payload: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const result = await db.insert(submissions).values({ ...input, status: "pending" });
   return result;
 }
 
+export async function createReview(input: { tenantId: number; placeId: number; authorId: number; rating: number; body?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(reviews).values({ ...input, body: input.body ?? null, status: "pending" });
+  return Number(result[0].insertId);
+}
+
+export async function createComment(input: { tenantId: number; entityType: "place" | "event"; entityId: number; authorId: number; body: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(comments).values({ ...input, status: "pending" });
+  return Number(result[0].insertId);
+}
+
+export async function listPublicReviews(placeId: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: reviews.id, rating: reviews.rating, body: reviews.body, createdAt: reviews.createdAt, authorName: users.name }).from(reviews).leftJoin(users, eq(users.id, reviews.authorId)).where(and(eq(reviews.placeId, placeId), eq(reviews.tenantId, tenantId), eq(reviews.status, "approved"))).orderBy(desc(reviews.createdAt)).limit(50);
+}
+
+export async function listPublicComments(entityType: "place" | "event", entityId: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: comments.id, body: comments.body, createdAt: comments.createdAt, authorName: users.name }).from(comments).leftJoin(users, eq(users.id, comments.authorId)).where(and(eq(comments.entityType, entityType), eq(comments.entityId, entityId), eq(comments.tenantId, tenantId), eq(comments.status, "approved"))).orderBy(desc(comments.createdAt)).limit(50);
+}
+
 export async function reviewSubmission(input: { id: number; tenantId: number; reviewerId: number; status: "approved" | "rejected" | "needs_changes"; note?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  const submission = await db.select().from(submissions).where(and(eq(submissions.id, input.id), eq(submissions.tenantId, input.tenantId))).limit(1);
+  if (!submission[0]) throw new Error("Submission not found");
   await db.update(submissions).set({ status: input.status, reviewedBy: input.reviewerId, reviewedAt: new Date(), reviewNote: input.note ?? null }).where(and(eq(submissions.id, input.id), eq(submissions.tenantId, input.tenantId)));
+  if (input.status === "approved" && !submission[0].entityId && (submission[0].entityType === "place" || submission[0].entityType === "event")) {
+    const payload = JSON.parse(submission[0].payload) as Record<string, unknown>;
+    if (submission[0].entityType === "place") {
+      const created = await db.insert(places).values({ tenantId: input.tenantId, submittedBy: submission[0].submittedBy, name: String(payload.name ?? "Novo local"), slug: String(payload.slug ?? `contribuicao-${submission[0].id}`), type: payload.type ? String(payload.type) : null, description: payload.description ? String(payload.description) : null, city: "Adamantina", state: "SP", status: "approved" });
+      await db.update(submissions).set({ entityId: Number(created[0].insertId) }).where(eq(submissions.id, input.id));
+    } else {
+      const created = await db.insert(events).values({ tenantId: input.tenantId, submittedBy: submission[0].submittedBy, title: String(payload.title ?? "Novo evento"), slug: String(payload.slug ?? `contribuicao-${submission[0].id}`), description: payload.description ? String(payload.description) : null, startsAt: payload.startsAt ? new Date(String(payload.startsAt)) : new Date(), status: "approved" });
+      await db.update(submissions).set({ entityId: Number(created[0].insertId) }).where(eq(submissions.id, input.id));
+    }
+  }
+  if (submission[0].entityId && (input.status === "approved" || input.status === "rejected")) {
+    const nextStatus = input.status === "approved" ? "approved" : "rejected";
+    if (submission[0].entityType === "review") await db.update(reviews).set({ status: nextStatus }).where(and(eq(reviews.id, submission[0].entityId), eq(reviews.tenantId, input.tenantId)));
+    if (submission[0].entityType === "comment") await db.update(comments).set({ status: nextStatus }).where(and(eq(comments.id, submission[0].entityId), eq(comments.tenantId, input.tenantId)));
+  }
   await db.insert(auditLogs).values({ tenantId: input.tenantId, actorId: input.reviewerId, action: `submission.${input.status}`, entityType: "submission", entityId: input.id, metadata: input.note ?? null });
 }
 

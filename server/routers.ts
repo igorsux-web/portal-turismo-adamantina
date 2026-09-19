@@ -3,9 +3,11 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
   createEvent,
+  createComment,
   createMedia,
   createPlace,
   createQrCode,
+  createReview,
   createSubmission,
   acceptInvitation,
   addItineraryItem,
@@ -27,6 +29,8 @@ import {
   listPendingSubmissions,
   listPublishedPlaces,
   listPublicMedia,
+  listPublicComments,
+  listPublicReviews,
   listMapPoints,
   listQrCodes,
   listItineraries,
@@ -99,6 +103,12 @@ export const appRouter = router({
     place: publicProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); const place = await getPublishedPlace(input.id, tenant.id); if (!place) throw new TRPCError({ code: "NOT_FOUND", message: "Local não encontrado." }); return { place, media: await listPublicMedia("place", place.id, tenant.id) }; }),
     event: publicProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); const event = await getPublishedEvent(input.id, tenant.id); if (!event) throw new TRPCError({ code: "NOT_FOUND", message: "Evento não encontrado." }); return { event, media: await listPublicMedia("event", event.id, tenant.id) }; }),
     map: publicProcedure.input(defaultTenantInput).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); return { tenant, ...await listMapPoints(tenant.id) }; }),
+  }),
+
+  feedback: router({
+    list: publicProcedure.input(defaultTenantInput.extend({ entityType: z.enum(["place", "event"]), entityId: z.number().int().positive() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); return { reviews: input.entityType === "place" ? await listPublicReviews(input.entityId, tenant.id) : [], comments: await listPublicComments(input.entityType, input.entityId, tenant.id) }; }),
+    review: protectedProcedure.input(defaultTenantInput.extend({ placeId: z.number().int().positive(), rating: z.number().int().min(1).max(5), body: z.string().trim().max(2000).optional() })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const place = await getPublishedPlace(input.placeId, tenant.id); if (!place) throw new TRPCError({ code: "NOT_FOUND", message: "Local não encontrado." }); const id = await createReview({ tenantId: tenant.id, placeId: input.placeId, authorId: ctx.user.id, rating: input.rating, body: input.body }); await createSubmission({ tenantId: tenant.id, submittedBy: ctx.user.id, entityType: "review", entityId: id, payload: JSON.stringify({ placeId: input.placeId, rating: input.rating, body: input.body ?? "" }) }); return { success: true, status: "pending" as const }; }),
+    comment: protectedProcedure.input(defaultTenantInput.extend({ entityType: z.enum(["place", "event"]), entityId: z.number().int().positive(), body: z.string().trim().min(2).max(2000) })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const valid = input.entityType === "place" ? await getPublishedPlace(input.entityId, tenant.id) : await getPublishedEvent(input.entityId, tenant.id); if (!valid) throw new TRPCError({ code: "NOT_FOUND", message: "Conteúdo não encontrado." }); const id = await createComment({ tenantId: tenant.id, entityType: input.entityType, entityId: input.entityId, authorId: ctx.user.id, body: input.body }); await createSubmission({ tenantId: tenant.id, submittedBy: ctx.user.id, entityType: "comment", entityId: id, payload: JSON.stringify({ entityType: input.entityType, entityId: input.entityId, body: input.body }) }); return { success: true, status: "pending" as const }; }),
   }),
 
   itineraries: router({
