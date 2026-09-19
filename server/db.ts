@@ -10,6 +10,8 @@ import {
   itineraryItems,
   itineraries,
   media,
+  placeProfiles,
+  placeResponsibles,
   qrCodes,
   places,
   reviews,
@@ -118,6 +120,20 @@ export async function getPublishedPlace(id: number, tenantId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(places).where(and(eq(places.id, id), eq(places.tenantId, tenantId), eq(places.status, "approved"))).limit(1);
+  return result[0];
+}
+
+export async function getPlaceProfile(placeId: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(placeProfiles).where(and(eq(placeProfiles.placeId, placeId), eq(placeProfiles.tenantId, tenantId))).limit(1);
+  return result[0];
+}
+
+export async function getPlaceResponsible(placeId: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select({ id: placeResponsibles.id, placeId: placeResponsibles.placeId, fullName: placeResponsibles.fullName, email: placeResponsibles.email, phone: placeResponsibles.phone, licenseType: placeResponsibles.licenseType, licenseNumber: placeResponsibles.licenseNumber, consentAt: placeResponsibles.consentAt, updatedAt: placeResponsibles.updatedAt }).from(placeResponsibles).where(and(eq(placeResponsibles.placeId, placeId), eq(placeResponsibles.tenantId, tenantId))).limit(1);
   return result[0];
 }
 
@@ -256,6 +272,32 @@ export async function listAdminPlaces(tenantId: number) {
   return db.select().from(places).where(eq(places.tenantId, tenantId)).orderBy(desc(places.updatedAt)).limit(200);
 }
 
+export async function listAdminMedia(entityType: "place" | "event", entityId: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(media).where(and(eq(media.entityType, entityType), eq(media.entityId, entityId), eq(media.tenantId, tenantId))).orderBy(asc(media.createdAt));
+}
+
+export async function deleteMedia(id: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(media).where(and(eq(media.id, id), eq(media.tenantId, tenantId)));
+}
+
+export async function upsertPlaceProfile(placeId: number, tenantId: number, input: Partial<typeof placeProfiles.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(placeProfiles).values({ placeId, tenantId, ...input }).onDuplicateKeyUpdate({ set: input });
+  return getPlaceProfile(placeId, tenantId);
+}
+
+export async function upsertPlaceResponsible(placeId: number, tenantId: number, createdBy: number, input: Partial<typeof placeResponsibles.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(placeResponsibles).values({ placeId, tenantId, createdBy, fullName: String(input.fullName ?? ""), ...input }).onDuplicateKeyUpdate({ set: { ...input, tenantId, placeId } });
+  return getPlaceResponsible(placeId, tenantId);
+}
+
 export async function listAdminEvents(tenantId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -266,7 +308,7 @@ export async function createPlace(input: typeof places.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const result = await db.insert(places).values(input);
-  return result;
+  return Number(result[0].insertId);
 }
 
 export async function updatePlace(id: number, tenantId: number, input: Partial<typeof places.$inferInsert>) {

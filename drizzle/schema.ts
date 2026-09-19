@@ -79,6 +79,41 @@ export const places = mysqlTable("places", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({ tenantStatusIdx: index("places_tenant_status_idx").on(table.tenantId, table.status) }));
 
+export const placeProfiles = mysqlTable("placeProfiles", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  placeId: int("placeId").notNull().unique(),
+  serviceTags: text("serviceTags"),
+  accommodationRooms: int("accommodationRooms"),
+  accommodationBeds: int("accommodationBeds"),
+  restaurantSeats: int("restaurantSeats"),
+  cuisineType: varchar("cuisineType", { length: 160 }),
+  attractionDurationMinutes: int("attractionDurationMinutes"),
+  bookingUrl: text("bookingUrl"),
+  reservationPhone: varchar("reservationPhone", { length: 40 }),
+  acceptsPets: int("acceptsPets").default(0).notNull(),
+  hasParking: int("hasParking").default(0).notNull(),
+  accessibilityFeatures: text("accessibilityFeatures"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({ tenantPlaceIdx: index("place_profiles_tenant_place_idx").on(table.tenantId, table.placeId) }));
+
+export const placeResponsibles = mysqlTable("placeResponsibles", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  placeId: int("placeId").notNull().unique(),
+  fullName: varchar("fullName", { length: 180 }).notNull(),
+  cpfCiphertext: text("cpfCiphertext"),
+  email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 40 }),
+  licenseType: varchar("licenseType", { length: 120 }),
+  licenseNumber: varchar("licenseNumber", { length: 120 }),
+  consentAt: timestamp("consentAt"),
+  createdBy: int("createdBy").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({ tenantPlaceIdx: index("place_responsibles_tenant_place_idx").on(table.tenantId, table.placeId) }));
+
 export const events = mysqlTable("events", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: int("tenantId").notNull(),
@@ -229,6 +264,8 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type VisitorProfile = typeof visitorProfiles.$inferSelect;
 export type Place = typeof places.$inferSelect;
+export type PlaceProfile = typeof placeProfiles.$inferSelect;
+export type PlaceResponsible = typeof placeResponsibles.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
 export type Media = typeof media.$inferSelect;
