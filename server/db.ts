@@ -315,6 +315,13 @@ export async function listAdminPlaces(tenantId: number) {
   return db.select().from(places).where(eq(places.tenantId, tenantId)).orderBy(desc(places.updatedAt)).limit(200);
 }
 
+export async function getPlaceBySlug(slug: string, tenantId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select({ id: places.id, name: places.name }).from(places).where(and(eq(places.slug, slug), eq(places.tenantId, tenantId))).limit(1);
+  return result[0];
+}
+
 export async function listAdminMedia(entityType: "place" | "event", entityId: number, tenantId: number) {
   const db = await getDb();
   if (!db) return [];
