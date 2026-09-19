@@ -3,10 +3,15 @@ Copie este arquivo para .env.local e substitua todos os valores.
 DATABASE_URL=mysql://usuario:senha@localhost:3306/portal_turismo?ssl=false
 JWT_SECRET=gere-um-segredo-aleatorio-com-32-ou-mais-caracteres
 
-# Fora do Manus, substitua o adaptador Manus OAuth em server/_core/oauth.ts.
-VITE_APP_ID=seu-client-id
-OAUTH_SERVER_URL=https://seu-provedor-oauth.example.com
-VITE_OAUTH_PORTAL_URL=https://seu-provedor-oauth.example.com/login
+# Google OAuth (não compartilhe o secret; cadastre-o como variável criptografada na Vercel)
+GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=seu-client-secret
+GOOGLE_REDIRECT_URI=https://seu-projeto.vercel.app/api/oauth/google/callback
+
+# Legado Manus OAuth (não usado pelo login Google atual)
+VITE_APP_ID=
+OAUTH_SERVER_URL=
+VITE_OAUTH_PORTAL_URL=
 OWNER_OPEN_ID=identificador-do-administrador-inicial
 OWNER_NAME=Administrador da plataforma
 

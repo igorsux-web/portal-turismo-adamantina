@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "../server/_core/oauth";
+import { registerGoogleOAuthRoutes } from "../server/_core/googleOAuth";
 import { registerStorageProxy } from "../server/_core/storageProxy";
 import { createContext } from "../server/_core/context";
 import { securityHeaders } from "../server/security";
@@ -18,6 +19,7 @@ app.use(express.urlencoded({ limit: "8mb", extended: true }));
 app.get("/healthz", healthHandler);
 registerStorageProxy(app);
 registerOAuthRoutes(app);
+registerGoogleOAuthRoutes(app);
 app.use(requestProtection);
 app.use(
   "/api/trpc",
