@@ -6,6 +6,9 @@ import {
   auditLogs,
   categories,
   events,
+  invitations,
+  itineraryItems,
+  itineraries,
   media,
   qrCodes,
   places,
@@ -208,4 +211,98 @@ export async function getQrCode(code: string) {
   if (!db) return undefined;
   const result = await db.select().from(qrCodes).where(and(eq(qrCodes.code, code), eq(qrCodes.active, 1))).limit(1);
   return result[0];
+}
+
+export async function listItineraries(tenantId: number, ownerId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const filters = ownerId ? and(eq(itineraries.tenantId, tenantId), eq(itineraries.ownerId, ownerId)) : and(eq(itineraries.tenantId, tenantId), eq(itineraries.status, "published"));
+  return db.select().from(itineraries).where(filters).orderBy(desc(itineraries.updatedAt));
+}
+
+export async function getItinerary(id: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const route = await db.select().from(itineraries).where(and(eq(itineraries.id, id), eq(itineraries.tenantId, tenantId))).limit(1);
+  if (!route[0]) return undefined;
+  const items = await db.select().from(itineraryItems).where(eq(itineraryItems.itineraryId, id)).orderBy(asc(itineraryItems.position));
+  const enrichedItems = await Promise.all(items.map(async (item) => {
+    const place = item.placeId ? await db.select({ name: places.name }).from(places).where(eq(places.id, item.placeId)).limit(1) : [];
+    const event = item.eventId ? await db.select({ title: events.title }).from(events).where(eq(events.id, item.eventId)).limit(1) : [];
+    return { ...item, label: place[0]?.name ?? event[0]?.title ?? item.note ?? `Parada ${item.position + 1}` };
+  }));
+  return { ...route[0], items: enrichedItems };
+}
+
+export async function createItinerary(input: typeof itineraries.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(itineraries).values(input);
+  return Number(result[0].insertId);
+}
+
+export async function addItineraryItem(input: typeof itineraryItems.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(itineraryItems).values(input);
+}
+
+export async function deleteItineraryItem(id: number, itineraryId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(itineraryItems).where(and(eq(itineraryItems.id, id), eq(itineraryItems.itineraryId, itineraryId)));
+}
+
+export async function listTenantUsers(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: users.id, name: users.name, email: users.email, role: users.role, status: users.status, createdAt: users.createdAt, lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.tenantId, tenantId)).orderBy(desc(users.createdAt));
+}
+
+export async function updateTenantUser(id: number, tenantId: number, input: { role?: "municipal_admin" | "moderator" | "analyst" | "partner"; status?: "active" | "invited" | "suspended" }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(users).set(input).where(and(eq(users.id, id), eq(users.tenantId, tenantId)));
+}
+
+export async function createInvitation(input: typeof invitations.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(invitations).values(input);
+}
+
+export async function listTenantInvitations(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(invitations).where(eq(invitations.tenantId, tenantId)).orderBy(desc(invitations.createdAt));
+}
+
+export async function getInvitationByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(invitations).where(eq(invitations.token, token)).limit(1);
+  return result[0];
+}
+
+export async function acceptInvitation(token: string, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const invitation = await getInvitationByToken(token);
+  if (!invitation || invitation.acceptedAt || invitation.expiresAt < new Date()) throw new Error("Invitation invalid or expired");
+  await db.update(users).set({ tenantId: invitation.tenantId, role: invitation.role, status: "active" }).where(eq(users.id, userId));
+  await db.update(invitations).set({ acceptedAt: new Date() }).where(eq(invitations.id, invitation.id));
+  return invitation;
+}
+
+export async function getReportSummary(tenantId: number, start: Date, end: Date) {
+  const db = await getDb();
+  if (!db) return { places: 0, events: 0, attendance: 0, pending: 0, origin: [] as Array<{ label: string; value: number }> };
+  const [placesRows, eventRows, attendanceRows, pendingRows, originRows] = await Promise.all([
+    db.select({ value: count() }).from(places).where(and(eq(places.tenantId, tenantId), gte(places.createdAt, start), sql`${places.createdAt} <= ${end}`)),
+    db.select({ value: count() }).from(events).where(and(eq(events.tenantId, tenantId), gte(events.startsAt, start), sql`${events.startsAt} <= ${end}`)),
+    db.select({ value: count() }).from(attendance).where(and(eq(attendance.tenantId, tenantId), gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`)),
+    db.select({ value: count() }).from(submissions).where(and(eq(submissions.tenantId, tenantId), eq(submissions.status, "pending"))),
+    db.select({ label: sql<string>`COALESCE(${attendance.residenceState}, 'Não informado')`, value: count() }).from(attendance).where(and(eq(attendance.tenantId, tenantId), gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`)).groupBy(attendance.residenceState).orderBy(desc(count())),
+  ]);
+  return { places: placesRows[0]?.value ?? 0, events: eventRows[0]?.value ?? 0, attendance: attendanceRows[0]?.value ?? 0, pending: pendingRows[0]?.value ?? 0, origin: originRows };
 }

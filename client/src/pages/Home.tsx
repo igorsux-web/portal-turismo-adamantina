@@ -139,7 +139,7 @@ export default function Home() {
           <nav className="hidden items-center gap-7 text-sm font-semibold text-[#59716b] lg:flex">
             <a href="#explore" className="transition-colors hover:text-[#0d5c4d]">Explorar</a>
             <a href="#eventos" className="transition-colors hover:text-[#0d5c4d]">Eventos</a>
-            <a href="#roteiros" className="transition-colors hover:text-[#0d5c4d]">Roteiros</a>
+            <Link href="/roteiros" className="transition-colors hover:text-[#0d5c4d]">Roteiros</Link>
             <a href="#sobre" className="transition-colors hover:text-[#0d5c4d]">Sobre a cidade</a>
           </nav>
 
@@ -153,7 +153,7 @@ export default function Home() {
             {menuOpen ? <X /> : <Menu />}
           </button>
         </div>
-        {menuOpen && <div className="border-t border-[#dfe8e1] bg-[#fbfaf7] px-5 py-4 sm:hidden"><div className="container flex flex-col gap-4 text-sm font-semibold"><a href="#explore" onClick={() => setMenuOpen(false)}>Explorar</a><a href="#eventos" onClick={() => setMenuOpen(false)}>Eventos</a><a href="#roteiros" onClick={() => setMenuOpen(false)}>Roteiros</a><Link href="/admin">Área da secretaria</Link><Button onClick={() => startLogin()} className="rounded-full bg-[#0d5c4d] text-white">Entrar</Button></div></div>}
+        {menuOpen && <div className="border-t border-[#dfe8e1] bg-[#fbfaf7] px-5 py-4 sm:hidden"><div className="container flex flex-col gap-4 text-sm font-semibold"><a href="#explore" onClick={() => setMenuOpen(false)}>Explorar</a><a href="#eventos" onClick={() => setMenuOpen(false)}>Eventos</a><Link href="/roteiros" onClick={() => setMenuOpen(false)}>Roteiros</Link><Link href="/admin">Área da secretaria</Link><Button onClick={() => startLogin()} className="rounded-full bg-[#0d5c4d] text-white">Entrar</Button></div></div>}
       </header>
 
       <main>

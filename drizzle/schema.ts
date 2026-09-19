@@ -174,6 +174,42 @@ export const qrCodes = mysqlTable("qrCodes", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({ eventIdx: index("qr_codes_event_idx").on(table.tenantId, table.eventId) }));
 
+export const itineraries = mysqlTable("itineraries", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  ownerId: int("ownerId"),
+  title: varchar("title", { length: 180 }).notNull(),
+  slug: varchar("slug", { length: 180 }).notNull(),
+  description: text("description"),
+  durationMinutes: int("durationMinutes"),
+  distanceKm: decimal("distanceKm", { precision: 8, scale: 2 }),
+  status: mysqlEnum("status", ["draft", "published", "archived"]).default("draft").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({ tenantStatusIdx: index("itineraries_tenant_status_idx").on(table.tenantId, table.status) }));
+
+export const itineraryItems = mysqlTable("itineraryItems", {
+  id: int("id").autoincrement().primaryKey(),
+  itineraryId: int("itineraryId").notNull(),
+  placeId: int("placeId"),
+  eventId: int("eventId"),
+  position: int("position").notNull().default(0),
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ itineraryIdx: index("itinerary_items_itinerary_idx").on(table.itineraryId, table.position) }));
+
+export const invitations = mysqlTable("invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  role: mysqlEnum("role", ["municipal_admin", "moderator", "analyst", "partner"]).notNull(),
+  token: varchar("token", { length: 96 }).notNull().unique(),
+  invitedBy: int("invitedBy").notNull(),
+  acceptedAt: timestamp("acceptedAt"),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ tenantEmailIdx: index("invitations_tenant_email_idx").on(table.tenantId, table.email) }));
+
 export type Tenant = typeof tenants.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -182,3 +218,5 @@ export type Event = typeof events.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
 export type Media = typeof media.$inferSelect;
 export type QrCode = typeof qrCodes.$inferSelect;
+export type Itinerary = typeof itineraries.$inferSelect;
+export type Invitation = typeof invitations.$inferSelect;

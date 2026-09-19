@@ -8,6 +8,9 @@ import { trpc } from "@/lib/trpc";
 import AdminCatalog from "@/pages/AdminCatalog";
 import AdminEvents from "@/pages/AdminEvents";
 import AdminModeration from "@/pages/AdminModeration";
+import AdminItineraries from "@/pages/AdminItineraries";
+import AdminReports from "@/pages/AdminReports";
+import AdminUsers from "@/pages/AdminUsers";
 import {
   BarChart3,
   Bell,
@@ -127,5 +130,5 @@ function ChartBar({ label, height, active }: { label: string; height: string; ac
 function Legend({ color, label, value }: { color: string; label: string; value: string }) { return <div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${color}`} /><span className="w-24">{label}</span><strong className="text-[#20332f]">{value}</strong></div>; }
 
 function AdminModuleScreen({ active, onBack }: { active: string; onBack: () => void }) {
-  return <div className="min-h-screen bg-[#f5f7f5] p-5 text-[#20332f] sm:p-8"><div className="mx-auto max-w-[1440px]"><div className="mb-7 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a9b92]">Adamantina / Secretaria de Cultura e Turismo</p><h1 className="mt-2 font-display text-2xl font-bold tracking-[-0.04em] text-[#123f36]">{active}</h1></div><Button variant="outline" onClick={onBack} className="rounded-xl border-[#d4e1d6] bg-white text-[#0d5c4d]">Voltar ao painel</Button></div>{active === "Catálogo turístico" ? <AdminCatalog /> : active === "Eventos" ? <AdminEvents /> : active === "Moderação" ? <AdminModeration /> : <div className="rounded-[22px] bg-white p-10 text-center text-sm text-[#71827c]">Este módulo está sendo preparado para a próxima entrega.</div>}</div></div>;
+  return <div className="min-h-screen bg-[#f5f7f5] p-5 text-[#20332f] sm:p-8"><div className="mx-auto max-w-[1440px]"><div className="mb-7 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a9b92]">Adamantina / Secretaria de Cultura e Turismo</p><h1 className="mt-2 font-display text-2xl font-bold tracking-[-0.04em] text-[#123f36]">{active}</h1></div><Button variant="outline" onClick={onBack} className="rounded-xl border-[#d4e1d6] bg-white text-[#0d5c4d]">Voltar ao painel</Button></div>{active === "Catálogo turístico" ? <AdminCatalog /> : active === "Eventos" ? <AdminEvents /> : active === "Roteiros" ? <AdminItineraries /> : active === "Moderação" ? <AdminModeration /> : active === "Relatórios" ? <AdminReports /> : active === "Configurações" ? <AdminUsers /> : <div className="rounded-[22px] bg-white p-10 text-center text-sm text-[#71827c]">Este módulo está sendo preparado para a próxima entrega.</div>}</div></div>;
 }
