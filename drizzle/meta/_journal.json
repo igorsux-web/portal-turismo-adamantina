@@ -15,6 +15,13 @@
       "when": 1789779893308,
       "tag": "0001_fine_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1789780211493,
+      "tag": "0002_lovely_energizer",
+      "breakpoints": true
     }
   ]
 }

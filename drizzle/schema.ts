@@ -149,9 +149,36 @@ export const auditLogs = mysqlTable("auditLogs", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({ tenantCreatedIdx: index("audit_tenant_created_idx").on(table.tenantId, table.createdAt) }));
 
+export const media = mysqlTable("media", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  entityType: mysqlEnum("entityType", ["place", "event"]).notNull(),
+  entityId: int("entityId").notNull(),
+  fileKey: varchar("fileKey", { length: 500 }).notNull(),
+  url: text("url").notNull(),
+  mimeType: varchar("mimeType", { length: 100 }).notNull(),
+  altText: varchar("altText", { length: 240 }),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ entityIdx: index("media_entity_idx").on(table.tenantId, table.entityType, table.entityId) }));
+
+export const qrCodes = mysqlTable("qrCodes", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull(),
+  eventId: int("eventId").notNull(),
+  code: varchar("code", { length: 96 }).notNull().unique(),
+  label: varchar("label", { length: 120 }),
+  active: int("active").notNull().default(1),
+  expiresAt: timestamp("expiresAt"),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ eventIdx: index("qr_codes_event_idx").on(table.tenantId, table.eventId) }));
+
 export type Tenant = typeof tenants.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Place = typeof places.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
+export type Media = typeof media.$inferSelect;
+export type QrCode = typeof qrCodes.$inferSelect;

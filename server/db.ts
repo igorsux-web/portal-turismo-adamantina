@@ -6,6 +6,8 @@ import {
   auditLogs,
   categories,
   events,
+  media,
+  qrCodes,
   places,
   submissions,
   tenants,
@@ -142,4 +144,68 @@ export async function recordAttendance(input: { tenantId: number; eventId: numbe
   if (recent.length > 0) return { accepted: false, duplicate: true };
   await db.insert(attendance).values(input);
   return { accepted: true, duplicate: false };
+}
+
+export async function listAdminPlaces(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(places).where(eq(places.tenantId, tenantId)).orderBy(desc(places.updatedAt)).limit(200);
+}
+
+export async function listAdminEvents(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(events).where(eq(events.tenantId, tenantId)).orderBy(desc(events.startsAt)).limit(200);
+}
+
+export async function createPlace(input: typeof places.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(places).values(input);
+  return result;
+}
+
+export async function updatePlace(id: number, tenantId: number, input: Partial<typeof places.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  return db.update(places).set(input).where(and(eq(places.id, id), eq(places.tenantId, tenantId)));
+}
+
+export async function createEvent(input: typeof events.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  return db.insert(events).values(input);
+}
+
+export async function updateEvent(id: number, tenantId: number, input: Partial<typeof events.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  return db.update(events).set(input).where(and(eq(events.id, id), eq(events.tenantId, tenantId)));
+}
+
+export async function createMedia(input: typeof media.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(media).values(input);
+  return input;
+}
+
+export async function createQrCode(input: typeof qrCodes.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(qrCodes).values(input);
+  return input;
+}
+
+export async function listQrCodes(eventId: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(qrCodes).where(and(eq(qrCodes.eventId, eventId), eq(qrCodes.tenantId, tenantId))).orderBy(desc(qrCodes.createdAt));
+}
+
+export async function getQrCode(code: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(qrCodes).where(and(eq(qrCodes.code, code), eq(qrCodes.active, 1))).limit(1);
+  return result[0];
 }

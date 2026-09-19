@@ -5,6 +5,9 @@ import { Input } from "@/components/ui/input";
 import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import AdminCatalog from "@/pages/AdminCatalog";
+import AdminEvents from "@/pages/AdminEvents";
+import AdminModeration from "@/pages/AdminModeration";
 import {
   BarChart3,
   Bell,
@@ -91,6 +94,10 @@ export default function Admin() {
     );
   }
 
+  if (active !== "Visão geral") {
+    return <AdminModuleScreen active={active} onBack={() => setActive("Visão geral")} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#f5f7f5] text-[#20332f]">
       <aside className={`fixed inset-y-0 left-0 z-50 flex w-[265px] flex-col border-r border-[#dfe7df] bg-[#123f36] text-white transition-transform lg:translate-x-0 ${mobileMenu ? "translate-x-0" : "-translate-x-full"}`}>
@@ -118,3 +125,7 @@ function Metric({ icon: Icon, label, value, detail, tone }: { icon: typeof Landm
 
 function ChartBar({ label, height, active }: { label: string; height: string; active?: boolean }) { return <div className="flex h-full flex-1 flex-col items-center justify-end gap-3"><div className={`w-full max-w-[42px] rounded-t-xl transition hover:opacity-80 ${active ? "bg-[#0d5c4d]" : "bg-[#b9d2bd]"}`} style={{ height }} /><span className={`pb-2 text-[10px] font-bold tracking-wide ${active ? "text-[#0d5c4d]" : "text-[#9aa9a0]"}`}>{label}</span></div>; }
 function Legend({ color, label, value }: { color: string; label: string; value: string }) { return <div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${color}`} /><span className="w-24">{label}</span><strong className="text-[#20332f]">{value}</strong></div>; }
+
+function AdminModuleScreen({ active, onBack }: { active: string; onBack: () => void }) {
+  return <div className="min-h-screen bg-[#f5f7f5] p-5 text-[#20332f] sm:p-8"><div className="mx-auto max-w-[1440px]"><div className="mb-7 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#8a9b92]">Adamantina / Secretaria de Cultura e Turismo</p><h1 className="mt-2 font-display text-2xl font-bold tracking-[-0.04em] text-[#123f36]">{active}</h1></div><Button variant="outline" onClick={onBack} className="rounded-xl border-[#d4e1d6] bg-white text-[#0d5c4d]">Voltar ao painel</Button></div>{active === "Catálogo turístico" ? <AdminCatalog /> : active === "Eventos" ? <AdminEvents /> : active === "Moderação" ? <AdminModeration /> : <div className="rounded-[22px] bg-white p-10 text-center text-sm text-[#71827c]">Este módulo está sendo preparado para a próxima entrega.</div>}</div></div>;
+}
