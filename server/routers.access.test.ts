@@ -12,4 +12,14 @@ describe("dashboard access control", () => {
     const caller = appRouter.createCaller(ctx);
     await expect(caller.dashboard.stats({ slug: "adamantina" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
+
+  it("rejects unauthenticated account access", async () => {
+    const ctx: TrpcContext = {
+      user: null,
+      req: { protocol: "https", headers: {} } as TrpcContext["req"],
+      res: {} as TrpcContext["res"],
+    };
+    const caller = appRouter.createCaller(ctx);
+    await expect(caller.account.me()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
 });

@@ -14,6 +14,7 @@ import {
   createInvitation,
   createItinerary,
   getDefaultTenant,
+  getVisitorProfile,
   getDashboardStats,
   getPublishedEvent,
   getPublishedPlace,
@@ -38,10 +39,13 @@ import {
   listTenantInvitations,
   listTenantUsers,
   listUpcomingEvents,
+  deleteItinerary,
   recordAttendance,
   reviewSubmission,
   updateTenantUser,
   updateItineraryItemPositions,
+  updateItinerary,
+  upsertVisitorProfile,
   updateEvent,
   updatePlace,
 } from "./db";
@@ -97,6 +101,11 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => { const cookieOptions = getSessionCookieOptions(ctx.req); ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 }); return { success: true } as const; }),
   }),
 
+  account: router({
+    me: protectedProcedure.query(async ({ ctx }) => ({ user: ctx.user, profile: await getVisitorProfile(ctx.user.id) })),
+    updateProfile: protectedProcedure.input(z.object({ displayName: z.string().trim().max(160).optional(), bio: z.string().trim().max(1000).optional(), city: z.string().trim().max(120).optional(), state: z.string().trim().max(80).optional(), country: z.string().trim().max(80).optional(), interests: z.string().trim().max(1000).optional(), profileVisibility: z.enum(["private", "public"]).default("private") })).mutation(async ({ ctx, input }) => { const profile = await upsertVisitorProfile(ctx.user.id, input); return { profile }; }),
+  }),
+
   catalog: router({
     list: publicProcedure.input(defaultTenantInput.extend({ categoryId: z.number().int().positive().optional() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); return { tenant, categories: await listCategories(tenant.id), places: await listPublishedPlaces(tenant.id, input.categoryId) }; }),
     events: publicProcedure.input(defaultTenantInput.extend({ limit: z.number().int().min(1).max(100).optional() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); return { tenant, events: await listUpcomingEvents(tenant.id, input.limit ?? 20) }; }),
@@ -115,8 +124,11 @@ export const appRouter = router({
     official: publicProcedure.input(defaultTenantInput).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); return listItineraries(tenant.id); }),
     get: publicProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); const route = await getItinerary(input.id, tenant.id); if (!route || (route.status !== "published")) throw new TRPCError({ code: "NOT_FOUND", message: "Roteiro não encontrado." }); return route; }),
     mine: protectedProcedure.input(defaultTenantInput).query(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); return listItineraries(tenant.id, ctx.user.id); }),
+    mineGet: protectedProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).query(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const route = await getItinerary(input.id, tenant.id); if (!route || route.ownerId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND", message: "Roteiro pessoal não encontrado." }); return route; }),
     create: protectedProcedure.input(defaultTenantInput.extend({ title: z.string().min(2).max(180), description: z.string().max(5000).optional(), status: z.enum(["draft", "published"]).default("draft"), durationMinutes: z.number().int().nonnegative().optional(), distanceKm: z.number().nonnegative().optional(), items: z.array(z.object({ placeId: z.number().int().positive().optional(), eventId: z.number().int().positive().optional(), position: z.number().int().nonnegative(), note: z.string().max(500).optional() })).max(100).default([]) })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const routeId = await createItinerary({ tenantId: tenant.id, ownerId: ctx.user.id, title: input.title, slug: `${input.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, description: input.description, status: input.status, durationMinutes: input.durationMinutes, distanceKm: input.distanceKm?.toString() }); for (const item of input.items) await addItineraryItem({ itineraryId: routeId, placeId: item.placeId, eventId: item.eventId, position: item.position, note: item.note }); return { success: true } as const; }),
     optimize: protectedProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const route = await getItinerary(input.id, tenant.id); if (!route || (route.ownerId !== ctx.user.id && !["platform_admin", "municipal_admin"].includes(ctx.user.role))) throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode alterar este roteiro." }); const remaining = route.items.filter((item) => item.latitude !== null && item.longitude !== null); const ordered: typeof remaining = []; let current = remaining.shift(); while (current) { ordered.push(current); if (!remaining.length) break; const nextIndex = remaining.reduce((best, item, index) => { const distance = Math.hypot(Number(item.latitude) - Number(current?.latitude), Number(item.longitude) - Number(current?.longitude)); const bestDistance = Math.hypot(Number(remaining[best]?.latitude) - Number(current?.latitude), Number(remaining[best]?.longitude) - Number(current?.longitude)); return distance < bestDistance ? index : best; }, 0); current = remaining.splice(nextIndex, 1)[0]; } await updateItineraryItemPositions(ordered.map((item, position) => ({ id: item.id, position })), route.id); return { success: true, orderedIds: ordered.map((item) => item.id) } as const; }),
+    updateMine: protectedProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive(), title: z.string().trim().min(2).max(180).optional(), description: z.string().trim().max(5000).optional() })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const route = await getItinerary(input.id, tenant.id); if (!route || route.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode alterar este roteiro." }); await updateItinerary(input.id, tenant.id, ctx.user.id, { title: input.title, description: input.description }); return { success: true } as const; }),
+    deleteMine: protectedProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const route = await getItinerary(input.id, tenant.id); if (!route || route.ownerId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode excluir este roteiro." }); await deleteItinerary(input.id, tenant.id, ctx.user.id); return { success: true } as const; }),
   }),
 
   submissions: router({

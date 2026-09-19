@@ -115,9 +115,7 @@ export default function Home() {
 
           <div className="hidden items-center gap-3 sm:flex">
             <Link href="/admin" className="text-sm font-semibold text-[#59716b] transition-colors hover:text-[#0d5c4d]">Área da secretaria</Link>
-            <Button onClick={() => startLogin()} className="rounded-full bg-[#0d5c4d] px-5 font-bold text-white shadow-[0_8px_18px_rgba(13,92,77,0.18)] hover:bg-[#08483c]">
-              {isAuthenticated ? "Minha conta" : "Entrar"}
-            </Button>
+            {isAuthenticated ? <Link href="/minha-conta"><Button className="rounded-full bg-[#0d5c4d] px-5 font-bold text-white shadow-[0_8px_18px_rgba(13,92,77,0.18)] hover:bg-[#08483c]">Minha conta</Button></Link> : <Button onClick={() => startLogin()} className="rounded-full bg-[#0d5c4d] px-5 font-bold text-white shadow-[0_8px_18px_rgba(13,92,77,0.18)] hover:bg-[#08483c]">Entrar</Button>}
           </div>
           <button className="rounded-xl p-2 text-[#0d5c4d] sm:hidden" onClick={() => setMenuOpen((open) => !open)} aria-label="Abrir menu">
             {menuOpen ? <X /> : <Menu />}

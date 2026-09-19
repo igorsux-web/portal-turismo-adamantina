@@ -17,6 +17,7 @@ import {
   submissions,
   tenants,
   users,
+  visitorProfiles,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -77,6 +78,20 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
+}
+
+export async function getVisitorProfile(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(visitorProfiles).where(eq(visitorProfiles.userId, userId)).limit(1);
+  return result[0];
+}
+
+export async function upsertVisitorProfile(userId: number, input: Partial<typeof visitorProfiles.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(visitorProfiles).values({ userId, ...input }).onDuplicateKeyUpdate({ set: input });
+  return getVisitorProfile(userId);
 }
 
 export async function getTenantBySlug(slug: string) {
@@ -315,6 +330,19 @@ export async function createItinerary(input: typeof itineraries.$inferInsert) {
   if (!db) throw new Error("Database unavailable");
   const result = await db.insert(itineraries).values(input);
   return Number(result[0].insertId);
+}
+
+export async function updateItinerary(id: number, tenantId: number, ownerId: number, input: Partial<typeof itineraries.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(itineraries).set(input).where(and(eq(itineraries.id, id), eq(itineraries.tenantId, tenantId), eq(itineraries.ownerId, ownerId)));
+}
+
+export async function deleteItinerary(id: number, tenantId: number, ownerId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(itineraryItems).where(eq(itineraryItems.itineraryId, id));
+  await db.delete(itineraries).where(and(eq(itineraries.id, id), eq(itineraries.tenantId, tenantId), eq(itineraries.ownerId, ownerId)));
 }
 
 export async function addItineraryItem(input: typeof itineraryItems.$inferInsert) {

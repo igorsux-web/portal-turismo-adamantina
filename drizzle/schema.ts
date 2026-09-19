@@ -24,6 +24,20 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 }, (table) => ({ tenantIdx: index("users_tenant_idx").on(table.tenantId) }));
 
+export const visitorProfiles = mysqlTable("visitorProfiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  displayName: varchar("displayName", { length: 160 }),
+  bio: text("bio"),
+  city: varchar("city", { length: 120 }),
+  state: varchar("state", { length: 80 }),
+  country: varchar("country", { length: 80 }).default("Brasil"),
+  interests: text("interests"),
+  profileVisibility: mysqlEnum("profileVisibility", ["private", "public"]).default("private").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const categories = mysqlTable("categories", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: int("tenantId"),
@@ -213,6 +227,7 @@ export const invitations = mysqlTable("invitations", {
 export type Tenant = typeof tenants.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+export type VisitorProfile = typeof visitorProfiles.$inferSelect;
 export type Place = typeof places.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
