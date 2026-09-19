@@ -38,6 +38,19 @@ export async function getDb() {
   return _db;
 }
 
+export async function recordAudit(input: { tenantId?: number | null; actorId?: number | null; action: string; entityType?: string; entityId?: number | null; metadata?: Record<string, unknown> | string | null }) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(auditLogs).values({
+    tenantId: input.tenantId ?? null,
+    actorId: input.actorId ?? null,
+    action: input.action,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
+    metadata: typeof input.metadata === "string" ? input.metadata : input.metadata ? JSON.stringify(input.metadata) : null,
+  });
+}
+
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();

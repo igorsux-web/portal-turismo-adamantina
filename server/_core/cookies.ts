@@ -42,7 +42,9 @@ export function getSessionCookieOptions(
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    // SameSite=None requires Secure and is only needed for cross-site OAuth
+    // embedding. Local HTTP must use Lax or browsers silently reject the cookie.
+    sameSite: isSecureRequest(req) ? "none" : "lax",
     secure: isSecureRequest(req),
   };
 }
