@@ -64,6 +64,13 @@
       "when": 1789851335523,
       "tag": "0008_closed_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1789851547339,
+      "tag": "0009_curious_maverick",
+      "breakpoints": true
     }
   ]
 }
