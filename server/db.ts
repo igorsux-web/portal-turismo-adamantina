@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -19,7 +19,8 @@ import {
   users,
   visitorProfiles,
 } from "../drizzle/schema";
-import { ENV } from "./_core/env";
+import { ENV } from './_core/env';
+import { createHash } from "node:crypto";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -127,6 +128,13 @@ export async function getPublishedEvent(id: number, tenantId: number) {
   return result[0];
 }
 
+export async function getEventForTenant(id: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(events).where(and(eq(events.id, id), eq(events.tenantId, tenantId))).limit(1);
+  return result[0];
+}
+
 export async function listPublicMedia(entityType: "place" | "event", entityId: number, tenantId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -230,12 +238,15 @@ export async function reviewSubmission(input: { id: number; tenantId: number; re
   await db.insert(auditLogs).values({ tenantId: input.tenantId, actorId: input.reviewerId, action: `submission.${input.status}`, entityType: "submission", entityId: input.id, metadata: input.note ?? null });
 }
 
-export async function recordAttendance(input: { tenantId: number; eventId: number; visitorHash: string; residenceCity?: string; residenceState?: string; residenceCountry?: string; source: "portal" | "qr_code" }) {
+export async function recordAttendance(input: { tenantId: number; eventId: number; userId: number; residenceCity?: string; residenceState?: string; residenceCountry?: string; source: "portal" | "qr_code" }) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const recent = await db.select({ id: attendance.id }).from(attendance).where(and(eq(attendance.eventId, input.eventId), eq(attendance.visitorHash, input.visitorHash), gte(attendance.createdAt, sql`DATE_SUB(NOW(), INTERVAL 12 HOUR)`))).limit(1);
+  const event = await getPublishedEvent(input.eventId, input.tenantId);
+  if (!event) throw new Error("Event not found or not published");
+  const visitorHash = createHash("sha256").update(`${input.userId}:${input.eventId}:${new Date().toISOString().slice(0, 10)}`).digest("hex");
+  const recent = await db.select({ id: attendance.id }).from(attendance).where(and(eq(attendance.eventId, input.eventId), eq(attendance.visitorHash, visitorHash), gte(attendance.createdAt, sql`DATE_SUB(NOW(), INTERVAL 12 HOUR)`))).limit(1);
   if (recent.length > 0) return { accepted: false, duplicate: true };
-  await db.insert(attendance).values(input);
+  await db.insert(attendance).values({ tenantId: input.tenantId, eventId: input.eventId, visitorHash, residenceCity: input.residenceCity, residenceState: input.residenceState, residenceCountry: input.residenceCountry, source: input.source });
   return { accepted: true, duplicate: false };
 }
 
@@ -296,11 +307,18 @@ export async function listQrCodes(eventId: number, tenantId: number) {
   return db.select().from(qrCodes).where(and(eq(qrCodes.eventId, eventId), eq(qrCodes.tenantId, tenantId))).orderBy(desc(qrCodes.createdAt));
 }
 
+export async function deactivateQrCode(id: number, tenantId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(qrCodes).set({ active: 0 }).where(and(eq(qrCodes.id, id), eq(qrCodes.tenantId, tenantId)));
+}
+
 export async function getQrCode(code: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(qrCodes).where(and(eq(qrCodes.code, code), eq(qrCodes.active, 1))).limit(1);
-  return result[0];
+  const result = await db.select({ qr: qrCodes, eventTitle: events.title, eventStartsAt: events.startsAt, eventEndsAt: events.endsAt }).from(qrCodes).innerJoin(events, eq(events.id, qrCodes.eventId)).where(and(eq(qrCodes.code, code), eq(qrCodes.active, 1), eq(events.status, "approved"), sql`(${qrCodes.expiresAt} IS NULL OR ${qrCodes.expiresAt} > NOW())`)).limit(1);
+  if (!result[0]) return undefined;
+  return { ...result[0].qr, eventTitle: result[0].eventTitle, eventStartsAt: result[0].eventStartsAt, eventEndsAt: result[0].eventEndsAt };
 }
 
 export async function listItineraries(tenantId: number, ownerId?: number) {
@@ -404,17 +422,20 @@ export async function acceptInvitation(token: string, userId: number) {
   return invitation;
 }
 
-export async function getReportSummary(tenantId: number, start: Date, end: Date) {
+export async function getReportSummary(tenantId: number, start: Date, end: Date, eventId?: number) {
   const db = await getDb();
-  if (!db) return { places: 0, events: 0, attendance: 0, pending: 0, origin: [] as Array<{ label: string; value: number }> };
-  const [placesRows, eventRows, attendanceRows, pendingRows, originRows] = await Promise.all([
-    db.select({ value: count() }).from(places).where(and(eq(places.tenantId, tenantId), gte(places.createdAt, start), sql`${places.createdAt} <= ${end}`)),
-    db.select({ value: count() }).from(events).where(and(eq(events.tenantId, tenantId), gte(events.startsAt, start), sql`${events.startsAt} <= ${end}`)),
-    db.select({ value: count() }).from(attendance).where(and(eq(attendance.tenantId, tenantId), gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`)),
+  if (!db) return { places: 0, events: 0, attendance: 0, pending: 0, origin: [] as Array<{ label: string; value: number }>, originCity: [] as Array<{ label: string; value: number }> };
+  const attendanceFilters = [eq(attendance.tenantId, tenantId), gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`];
+  if (eventId) attendanceFilters.push(eq(attendance.eventId, eventId));
+  const [placesRows, eventRows, attendanceRows, pendingRows, originRows, originCityRows] = await Promise.all([
+    db.select({ value: count() }).from(places).where(and(eq(places.tenantId, tenantId), eq(places.status, "approved"), gte(places.createdAt, start), sql`${places.createdAt} <= ${end}`)),
+    db.select({ value: count() }).from(events).where(and(eq(events.tenantId, tenantId), eq(events.status, "approved"), gte(events.startsAt, start), sql`${events.startsAt} <= ${end}`)),
+    db.select({ value: count() }).from(attendance).where(and(...attendanceFilters)),
     db.select({ value: count() }).from(submissions).where(and(eq(submissions.tenantId, tenantId), eq(submissions.status, "pending"))),
-    db.select({ label: sql<string>`COALESCE(${attendance.residenceState}, 'Não informado')`, value: count() }).from(attendance).where(and(eq(attendance.tenantId, tenantId), gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`)).groupBy(attendance.residenceState).orderBy(desc(count())),
+    db.select({ label: sql<string>`COALESCE(${attendance.residenceState}, 'Não informado')`, value: count() }).from(attendance).where(and(...attendanceFilters)).groupBy(attendance.residenceState).orderBy(desc(count())),
+    db.select({ label: sql<string>`COALESCE(${attendance.residenceCity}, 'Não informado')`, value: count() }).from(attendance).where(and(...attendanceFilters)).groupBy(attendance.residenceCity).orderBy(desc(count())).limit(20),
   ]);
-  return { places: placesRows[0]?.value ?? 0, events: eventRows[0]?.value ?? 0, attendance: attendanceRows[0]?.value ?? 0, pending: pendingRows[0]?.value ?? 0, origin: originRows };
+  return { places: placesRows[0]?.value ?? 0, events: eventRows[0]?.value ?? 0, attendance: attendanceRows[0]?.value ?? 0, pending: pendingRows[0]?.value ?? 0, origin: originRows, originCity: originCityRows };
 }
 
 export async function listActiveTenants() {
@@ -431,7 +452,7 @@ export async function getComparativeReport(tenantIds: number[], start: Date, end
     const tenant = await db.select({ id: tenants.id, name: tenants.name, slug: tenants.slug }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
     if (tenant[0]) municipalities.push({ ...tenant[0], ...(await getReportSummary(tenantId, start, end)) });
   }
-  const eventRows = await db.select({ tenantId: events.tenantId, eventId: events.id, title: events.title, attendance: count(attendance.id) }).from(events).leftJoin(attendance, eq(attendance.eventId, events.id)).where(and(gte(events.startsAt, start), sql`${events.startsAt} <= ${end}`)).groupBy(events.tenantId, events.id, events.title).orderBy(desc(count(attendance.id))).limit(100);
-  const seasonalityRows = await db.select({ month: sql<number>`MONTH(${attendance.createdAt})`, attendance: count() }).from(attendance).where(and(gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`)).groupBy(sql`MONTH(${attendance.createdAt})`).orderBy(sql`MONTH(${attendance.createdAt})`);
+  const eventRows = await db.select({ tenantId: events.tenantId, eventId: events.id, title: events.title, attendance: count(attendance.id) }).from(events).leftJoin(attendance, eq(attendance.eventId, events.id)).where(and(inArray(events.tenantId, tenantIds), eq(events.status, "approved"), gte(events.startsAt, start), sql`${events.startsAt} <= ${end}`)).groupBy(events.tenantId, events.id, events.title).orderBy(desc(count(attendance.id))).limit(100);
+  const seasonalityRows = await db.select({ month: sql<number>`MONTH(${attendance.createdAt})`, attendance: count() }).from(attendance).where(and(inArray(attendance.tenantId, tenantIds), gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`)).groupBy(sql`MONTH(${attendance.createdAt})`).orderBy(sql`MONTH(${attendance.createdAt})`);
   return { municipalities, events: eventRows.filter((row) => tenantIds.includes(row.tenantId)), seasonality: seasonalityRows };
 }
