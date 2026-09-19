@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import {
   ArrowRight,
   CalendarDays,
@@ -81,19 +82,41 @@ const events = [
 
 export default function Home() {
   const { isAuthenticated } = useAuth();
+  const { data: catalogData } = trpc.catalog.list.useQuery({ slug: "adamantina" });
+  const { data: eventData } = trpc.catalog.events.useQuery({ slug: "adamantina", limit: 6 });
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("Todos");
   const [itinerary, setItinerary] = useState<string[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const sourcePlaces = useMemo(() => catalogData?.places?.length ? catalogData.places.map((place, index) => ({
+    name: place.name,
+    type: place.type ?? "Ponto de interesse",
+    description: place.description ?? "Uma experiência para descobrir em Adamantina.",
+    rating: "Novo",
+    reviews: 0,
+    tag: index % 2 === 0 ? "Descoberta" : "Local",
+    color: index % 2 === 0 ? "from-emerald-900/90 via-emerald-700/30 to-transparent" : "from-stone-900/90 via-stone-700/30 to-transparent",
+    accent: index % 2 === 0 ? "bg-emerald-100 text-emerald-800" : "bg-stone-100 text-stone-800",
+    icon: index % 2 === 0 ? "🌿" : "🏛️",
+  })) : places, [catalogData]);
+
   const filteredPlaces = useMemo(() => {
     const normalized = query.toLowerCase().trim();
-    return places.filter((place) => {
+    return sourcePlaces.filter((place) => {
       const matchesQuery = !normalized || `${place.name} ${place.type} ${place.description}`.toLowerCase().includes(normalized);
       const matchesCategory = activeCategory === "Todos" || place.type.toLowerCase().includes(activeCategory.toLowerCase().replace("s", ""));
       return matchesQuery && matchesCategory;
     });
-  }, [activeCategory, query]);
+  }, [activeCategory, query, sourcePlaces]);
+
+  const sourceEvents = useMemo(() => eventData?.events?.length ? eventData.events.map((event) => ({
+    date: new Date(event.startsAt).toLocaleDateString("pt-BR", { day: "2-digit" }),
+    month: new Date(event.startsAt).toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase(),
+    title: event.title,
+    meta: `${new Date(event.startsAt).toLocaleDateString("pt-BR", { weekday: "short" })} · ${new Date(event.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · ${event.venueName ?? "Adamantina"}`,
+    type: "Agenda",
+  })) : events, [eventData]);
 
   const toggleItinerary = (name: string) => {
     setItinerary((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name]);
@@ -172,7 +195,7 @@ export default function Home() {
           <div className="container grid items-center gap-12 lg:grid-cols-[0.85fr_1.15fr]"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-[#c4703a]">Veja de perto</p><h2 className="mt-3 font-display text-4xl font-bold leading-tight tracking-[-0.04em] text-[#123f36] sm:text-5xl">Tudo começa no mapa.</h2><p className="mt-5 max-w-md text-base leading-7 text-[#71827c]">Encontre experiências perto de você, descubra novos bairros e deixe o mapa inspirar o próximo destino.</p><div className="mt-8 flex flex-col gap-4"><div className="flex gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#0d5c4d] shadow-sm"><MapPin className="h-4 w-4" /></div><div><p className="font-bold text-[#20332f]">Pontos que contam histórias</p><p className="mt-1 text-sm text-[#71827c]">Atrativos, cultura, natureza e serviços em um só lugar.</p></div></div><div className="flex gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#0d5c4d] shadow-sm"><Navigation className="h-4 w-4" /></div><div><p className="font-bold text-[#20332f]">Roteiro do seu jeito</p><p className="mt-1 text-sm text-[#71827c]">Salve seus favoritos e organize um passeio personalizado.</p></div></div></div></div><div className="relative overflow-hidden rounded-[28px] border-8 border-white bg-[#dce9df] shadow-[0_18px_40px_rgba(37,75,59,0.12)]"><MapView className="h-[420px]" initialCenter={{ lat: -21.685, lng: -51.073 }} initialZoom={14} /><div className="pointer-events-none absolute left-5 top-5 flex gap-2"><Badge className="border border-white/80 bg-white/90 px-3 py-2 text-[#0d5c4d] shadow-lg"><MapPin className="mr-1.5 h-3.5 w-3.5 fill-[#c4703a] text-[#c4703a]" /> 24 lugares próximos</Badge></div><div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2"><span className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-[#55716a] shadow">🌿 Natureza</span><span className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-[#55716a] shadow">🏛️ Cultura</span><span className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-[#55716a] shadow">🍽️ Gastronomia</span></div></div></div>
         </section>
 
-        <section id="eventos" className="container py-20"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-[#c4703a]">A cidade em movimento</p><h2 className="mt-3 font-display text-4xl font-bold tracking-[-0.04em] text-[#123f36] sm:text-5xl">Acontece em Adamantina</h2></div><Button variant="ghost" className="justify-start px-0 font-bold text-[#0d5c4d] hover:bg-transparent hover:text-[#c4703a]">Ver todos os eventos <ArrowRight className="ml-2 h-4 w-4" /></Button></div><div className="mt-10 grid gap-4 lg:grid-cols-3">{events.map((event) => <Card key={event.title} className="group rounded-[22px] border-[#e1e9e2] bg-white p-5 shadow-[0_10px_25px_rgba(39,73,57,0.05)] transition hover:border-[#b8d0bd] hover:shadow-lg"><div className="flex gap-4"><div className="flex h-[68px] w-[62px] shrink-0 flex-col items-center justify-center rounded-2xl bg-[#eef5ee] text-[#0d5c4d]"><span className="font-display text-2xl font-bold leading-none">{event.date}</span><span className="mt-1 text-[10px] font-bold tracking-widest">{event.month}</span></div><div><Badge className="border-0 bg-[#fff0e2] text-[10px] font-bold uppercase tracking-wide text-[#b46231]">{event.type}</Badge><h3 className="mt-2 font-display text-xl font-bold leading-tight tracking-[-0.03em] text-[#20332f]">{event.title}</h3><p className="mt-2 flex items-center gap-1.5 text-xs text-[#82928b]"><Clock3 className="h-3.5 w-3.5" /> {event.meta}</p></div></div><button className="mt-5 flex w-full items-center justify-between border-t border-[#edf1ed] pt-4 text-sm font-bold text-[#0d5c4d]">Ver detalhes <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" /></button></Card>)}</div></section>
+        <section id="eventos" className="container py-20"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-[#c4703a]">A cidade em movimento</p><h2 className="mt-3 font-display text-4xl font-bold tracking-[-0.04em] text-[#123f36] sm:text-5xl">Acontece em Adamantina</h2></div><Button variant="ghost" className="justify-start px-0 font-bold text-[#0d5c4d] hover:bg-transparent hover:text-[#c4703a]">Ver todos os eventos <ArrowRight className="ml-2 h-4 w-4" /></Button></div><div className="mt-10 grid gap-4 lg:grid-cols-3">{sourceEvents.map((event) => <Card key={event.title} className="group rounded-[22px] border-[#e1e9e2] bg-white p-5 shadow-[0_10px_25px_rgba(39,73,57,0.05)] transition hover:border-[#b8d0bd] hover:shadow-lg"><div className="flex gap-4"><div className="flex h-[68px] w-[62px] shrink-0 flex-col items-center justify-center rounded-2xl bg-[#eef5ee] text-[#0d5c4d]"><span className="font-display text-2xl font-bold leading-none">{event.date}</span><span className="mt-1 text-[10px] font-bold tracking-widest">{event.month}</span></div><div><Badge className="border-0 bg-[#fff0e2] text-[10px] font-bold uppercase tracking-wide text-[#b46231]">{event.type}</Badge><h3 className="mt-2 font-display text-xl font-bold leading-tight tracking-[-0.03em] text-[#20332f]">{event.title}</h3><p className="mt-2 flex items-center gap-1.5 text-xs text-[#82928b]"><Clock3 className="h-3.5 w-3.5" /> {event.meta}</p></div></div><button className="mt-5 flex w-full items-center justify-between border-t border-[#edf1ed] pt-4 text-sm font-bold text-[#0d5c4d]">Ver detalhes <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" /></button></Card>)}</div></section>
 
         <section id="roteiros" className="container pb-20"><div className="relative overflow-hidden rounded-[30px] bg-[#0d5c4d] px-7 py-12 text-white shadow-[0_18px_40px_rgba(13,92,77,0.18)] sm:px-12"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full border-[26px] border-white/10" /><div className="absolute bottom-[-80px] left-[44%] h-52 w-52 rounded-full border-[18px] border-[#f4c56e]/15" /><div className="relative grid items-center gap-8 lg:grid-cols-[1fr_auto]"><div><Badge className="border-0 bg-white/15 text-[#d8efce]">Seu próximo dia começa aqui</Badge><h2 className="mt-4 max-w-xl font-display text-4xl font-bold leading-tight tracking-[-0.05em] sm:text-5xl">Monte um roteiro e viva mais da cidade.</h2><p className="mt-4 max-w-xl leading-7 text-white/70">Salve lugares, combine experiências e compartilhe um passeio feito sob medida para você.</p></div><div className="flex flex-col gap-3 sm:flex-row lg:flex-col"><Button onClick={() => startLogin()} className="rounded-full bg-[#f4c56e] px-6 font-bold text-[#5d421e] hover:bg-[#f7d88d]">Criar meu roteiro <ArrowRight className="ml-2 h-4 w-4" /></Button><div className="flex items-center justify-center gap-2 rounded-full border border-white/20 px-5 py-2 text-sm text-white/75"><Heart className="h-4 w-4" /> {itinerary.length ? `${itinerary.length} lugares selecionados` : "Comece pelos favoritos"}</div></div></div></div></section>
 

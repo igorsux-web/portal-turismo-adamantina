@@ -1,11 +1,20 @@
-import { eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import {
+  InsertUser,
+  attendance,
+  auditLogs,
+  categories,
+  events,
+  places,
+  submissions,
+  tenants,
+  users,
+} from "../drizzle/schema";
+import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -19,74 +28,118 @@ export async function getDb() {
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-
+  if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot upsert user: database not available");
     return;
   }
 
-  try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
-
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
+  const values: InsertUser = { openId: user.openId };
+  const updateSet: Record<string, unknown> = {};
+  const textFields = ["name", "email", "loginMethod"] as const;
+  for (const field of textFields) {
+    if (user[field] !== undefined) {
+      values[field] = user[field] ?? null;
+      updateSet[field] = user[field] ?? null;
     }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
   }
+  if (user.lastSignedIn !== undefined) {
+    values.lastSignedIn = user.lastSignedIn;
+    updateSet.lastSignedIn = user.lastSignedIn;
+  }
+  if (user.tenantId !== undefined) {
+    values.tenantId = user.tenantId;
+    updateSet.tenantId = user.tenantId;
+  }
+  if (user.role !== undefined) {
+    values.role = user.role;
+    updateSet.role = user.role;
+  } else if (user.openId === ENV.ownerOpenId) {
+    values.role = "platform_admin";
+    updateSet.role = "platform_admin";
+  }
+  if (!values.lastSignedIn) values.lastSignedIn = new Date();
+  if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
+
+  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
 }
 
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
+  if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
-  return result.length > 0 ? result[0] : undefined;
+  return result[0];
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function getTenantBySlug(slug: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(tenants).where(and(eq(tenants.slug, slug), eq(tenants.status, "active"))).limit(1);
+  return result[0];
+}
+
+export async function getDefaultTenant() {
+  return getTenantBySlug("adamantina");
+}
+
+export async function listPublishedPlaces(tenantId: number, categoryId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const filters = [eq(places.tenantId, tenantId), eq(places.status, "approved")];
+  if (categoryId) filters.push(eq(places.categoryId, categoryId));
+  return db.select().from(places).where(and(...filters)).orderBy(asc(places.name));
+}
+
+export async function listCategories(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(categories).where(eq(categories.tenantId, tenantId)).orderBy(asc(categories.name));
+}
+
+export async function listUpcomingEvents(tenantId: number, limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(events).where(and(eq(events.tenantId, tenantId), eq(events.status, "approved"), gte(events.startsAt, new Date()))).orderBy(asc(events.startsAt)).limit(limit);
+}
+
+export async function getDashboardStats(tenantId: number) {
+  const db = await getDb();
+  if (!db) return { places: 0, events: 0, attendance: 0, pending: 0 };
+  const [placeRows, eventRows, attendanceRows, pendingRows] = await Promise.all([
+    db.select({ value: count() }).from(places).where(and(eq(places.tenantId, tenantId), eq(places.status, "approved"))),
+    db.select({ value: count() }).from(events).where(and(eq(events.tenantId, tenantId), eq(events.status, "approved"))),
+    db.select({ value: count() }).from(attendance).where(eq(attendance.tenantId, tenantId)),
+    db.select({ value: count() }).from(submissions).where(and(eq(submissions.tenantId, tenantId), eq(submissions.status, "pending"))),
+  ]);
+  return { places: placeRows[0]?.value ?? 0, events: eventRows[0]?.value ?? 0, attendance: attendanceRows[0]?.value ?? 0, pending: pendingRows[0]?.value ?? 0 };
+}
+
+export async function listPendingSubmissions(tenantId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(submissions).where(and(eq(submissions.tenantId, tenantId), eq(submissions.status, "pending"))).orderBy(desc(submissions.createdAt)).limit(50);
+}
+
+export async function createSubmission(input: { tenantId: number; submittedBy: number; entityType: "place" | "event" | "review" | "comment" | "photo"; payload: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(submissions).values({ ...input, status: "pending" });
+  return result;
+}
+
+export async function reviewSubmission(input: { id: number; tenantId: number; reviewerId: number; status: "approved" | "rejected" | "needs_changes"; note?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(submissions).set({ status: input.status, reviewedBy: input.reviewerId, reviewedAt: new Date(), reviewNote: input.note ?? null }).where(and(eq(submissions.id, input.id), eq(submissions.tenantId, input.tenantId)));
+  await db.insert(auditLogs).values({ tenantId: input.tenantId, actorId: input.reviewerId, action: `submission.${input.status}`, entityType: "submission", entityId: input.id, metadata: input.note ?? null });
+}
+
+export async function recordAttendance(input: { tenantId: number; eventId: number; visitorHash: string; residenceCity?: string; residenceState?: string; residenceCountry?: string; source: "portal" | "qr_code" }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const recent = await db.select({ id: attendance.id }).from(attendance).where(and(eq(attendance.eventId, input.eventId), eq(attendance.visitorHash, input.visitorHash), gte(attendance.createdAt, sql`DATE_SUB(NOW(), INTERVAL 12 HOUR)`))).limit(1);
+  if (recent.length > 0) return { accepted: false, duplicate: true };
+  await db.insert(attendance).values(input);
+  return { accepted: true, duplicate: false };
+}

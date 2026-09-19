@@ -31,7 +31,8 @@ export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
 
-    if (!ctx.user || ctx.user.role !== 'admin') {
+    const administrativeRoles = ['platform_admin', 'municipal_admin', 'moderator', 'analyst'] as const;
+    if (!ctx.user || !administrativeRoles.includes(ctx.user.role as typeof administrativeRoles[number])) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
