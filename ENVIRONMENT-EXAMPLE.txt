@@ -1,0 +1,27 @@
+Copie este arquivo para .env.local e substitua todos os valores.
+
+DATABASE_URL=mysql://usuario:senha@localhost:3306/portal_turismo?ssl=false
+JWT_SECRET=gere-um-segredo-aleatorio-com-32-ou-mais-caracteres
+
+# Fora do Manus, substitua o adaptador Manus OAuth em server/_core/oauth.ts.
+VITE_APP_ID=seu-client-id
+OAUTH_SERVER_URL=https://seu-provedor-oauth.example.com
+VITE_OAUTH_PORTAL_URL=https://seu-provedor-oauth.example.com/login
+OWNER_OPEN_ID=identificador-do-administrador-inicial
+OWNER_NAME=Administrador da plataforma
+
+PUBLIC_APP_URL=http://localhost:3000
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+
+# O código atual usa o storage/map proxy do Manus. Ao migrar, substitua os adaptadores.
+BUILT_IN_FORGE_API_URL=
+BUILT_IN_FORGE_API_KEY=
+VITE_FRONTEND_FORGE_API_URL=
+VITE_FRONTEND_FORGE_API_KEY=
+
+VITE_ANALYTICS_ENDPOINT=
+VITE_ANALYTICS_WEBSITE_ID=
+VITE_APP_TITLE=Portal de Turismo Municipal
+VITE_APP_LOGO=
+NODE_ENV=development
