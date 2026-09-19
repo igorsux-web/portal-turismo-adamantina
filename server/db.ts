@@ -12,6 +12,7 @@ import {
   media,
   placeProfiles,
   placeResponsibles,
+  privacyRequests,
   qrCodes,
   places,
   reviews,
@@ -108,6 +109,27 @@ export async function upsertVisitorProfile(userId: number, input: Partial<typeof
   if (!db) throw new Error("Database unavailable");
   await db.insert(visitorProfiles).values({ userId, ...input }).onDuplicateKeyUpdate({ set: input });
   return getVisitorProfile(userId);
+}
+
+export async function createPrivacyRequest(input: typeof privacyRequests.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(privacyRequests).values(input);
+  return Number(result[0].insertId);
+}
+
+export async function getPrivacyExport(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [user, profile, userItineraries, userReviews, userComments, requests] = await Promise.all([
+    db.select({ id: users.id, name: users.name, email: users.email, loginMethod: users.loginMethod, role: users.role, status: users.status, createdAt: users.createdAt, updatedAt: users.updatedAt, lastSignedIn: users.lastSignedIn }).from(users).where(eq(users.id, userId)).limit(1),
+    db.select().from(visitorProfiles).where(eq(visitorProfiles.userId, userId)).limit(1),
+    db.select().from(itineraries).where(eq(itineraries.ownerId, userId)),
+    db.select().from(reviews).where(eq(reviews.authorId, userId)),
+    db.select().from(comments).where(eq(comments.authorId, userId)),
+    db.select({ type: privacyRequests.type, status: privacyRequests.status, createdAt: privacyRequests.createdAt, processedAt: privacyRequests.processedAt }).from(privacyRequests).where(eq(privacyRequests.userId, userId)).orderBy(desc(privacyRequests.createdAt)),
+  ]);
+  return { exportedAt: new Date().toISOString(), user: user[0] ?? null, profile: profile[0] ?? null, itineraries: userItineraries, reviews: userReviews, comments: userComments, privacyRequests: requests };
 }
 
 export async function getTenantBySlug(slug: string) {

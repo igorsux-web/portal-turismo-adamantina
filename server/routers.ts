@@ -18,6 +18,7 @@ import {
   getPlaceProfile,
   getPlaceResponsible,
   getVisitorProfile,
+  getPrivacyExport,
   getDashboardStats,
   getPublishedEvent,
   getPublishedPlace,
@@ -53,6 +54,7 @@ import {
   updateItineraryItemPositions,
   updateItinerary,
   upsertVisitorProfile,
+  createPrivacyRequest,
   updateEvent,
   updatePlace,
   upsertPlaceProfile,
@@ -126,6 +128,9 @@ export const appRouter = router({
   account: router({
     me: protectedProcedure.query(async ({ ctx }) => ({ user: ctx.user, profile: await getVisitorProfile(ctx.user.id) })),
     updateProfile: protectedProcedure.input(z.object({ displayName: z.string().trim().max(160).optional(), bio: z.string().trim().max(1000).optional(), city: z.string().trim().max(120).optional(), state: z.string().trim().max(80).optional(), country: z.string().trim().max(80).optional(), interests: z.string().trim().max(1000).optional(), profileVisibility: z.enum(["private", "public"]).default("private") })).mutation(async ({ ctx, input }) => { const profile = await upsertVisitorProfile(ctx.user.id, input); return { profile }; }),
+    exportData: protectedProcedure.query(async ({ ctx }) => { await createPrivacyRequest({ userId: ctx.user.id, type: "export", status: "completed", details: "Exportação solicitada pelo titular." }); await recordAudit({ actorId: ctx.user.id, action: "privacy.export", entityType: "user", entityId: ctx.user.id }); return getPrivacyExport(ctx.user.id); }),
+    requestDeletion: protectedProcedure.mutation(async ({ ctx }) => { const id = await createPrivacyRequest({ userId: ctx.user.id, type: "deletion", details: "Exclusão solicitada pelo titular; análise de retenção legal pendente." }); await recordAudit({ actorId: ctx.user.id, action: "privacy.deletion.request", entityType: "user", entityId: ctx.user.id, metadata: { requestId: id } }); return { success: true, requestId: id } as const; }),
+    withdrawConsent: protectedProcedure.input(z.object({ consentType: z.enum(["optional_profile", "communications", "analytics"]) })).mutation(async ({ ctx, input }) => { const id = await createPrivacyRequest({ userId: ctx.user.id, type: "consent_withdrawal", details: input.consentType }); await recordAudit({ actorId: ctx.user.id, action: "privacy.consent.withdraw", entityType: "user", entityId: ctx.user.id, metadata: { consentType: input.consentType, requestId: id } }); return { success: true, requestId: id } as const; }),
   }),
 
   catalog: router({

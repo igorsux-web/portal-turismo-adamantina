@@ -38,6 +38,16 @@ export const visitorProfiles = mysqlTable("visitorProfiles", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const privacyRequests = mysqlTable("privacyRequests", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  type: mysqlEnum("type", ["export", "deletion", "consent_withdrawal"]).notNull(),
+  status: mysqlEnum("status", ["requested", "processing", "completed", "rejected"]).default("requested").notNull(),
+  details: text("details"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  processedAt: timestamp("processedAt"),
+}, (table) => ({ userIdx: index("privacy_requests_user_idx").on(table.userId) }));
+
 export const categories = mysqlTable("categories", {
   id: int("id").autoincrement().primaryKey(),
   tenantId: int("tenantId"),
