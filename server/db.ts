@@ -227,9 +227,10 @@ export async function getItinerary(id: number, tenantId: number) {
   if (!route[0]) return undefined;
   const items = await db.select().from(itineraryItems).where(eq(itineraryItems.itineraryId, id)).orderBy(asc(itineraryItems.position));
   const enrichedItems = await Promise.all(items.map(async (item) => {
-    const place = item.placeId ? await db.select({ name: places.name }).from(places).where(eq(places.id, item.placeId)).limit(1) : [];
-    const event = item.eventId ? await db.select({ title: events.title }).from(events).where(eq(events.id, item.eventId)).limit(1) : [];
-    return { ...item, label: place[0]?.name ?? event[0]?.title ?? item.note ?? `Parada ${item.position + 1}` };
+    const place = item.placeId ? await db.select({ name: places.name, latitude: places.latitude, longitude: places.longitude }).from(places).where(eq(places.id, item.placeId)).limit(1) : [];
+    const event = item.eventId ? await db.select({ title: events.title, latitude: events.latitude, longitude: events.longitude }).from(events).where(eq(events.id, item.eventId)).limit(1) : [];
+    const source = place[0] ?? event[0];
+    return { ...item, label: place[0]?.name ?? event[0]?.title ?? item.note ?? `Parada ${item.position + 1}`, latitude: source?.latitude ?? null, longitude: source?.longitude ?? null };
   }));
   return { ...route[0], items: enrichedItems };
 }
@@ -251,6 +252,12 @@ export async function deleteItineraryItem(id: number, itineraryId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.delete(itineraryItems).where(and(eq(itineraryItems.id, id), eq(itineraryItems.itineraryId, itineraryId)));
+}
+
+export async function updateItineraryItemPositions(items: Array<{ id: number; position: number }>, itineraryId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  for (const item of items) await db.update(itineraryItems).set({ position: item.position }).where(and(eq(itineraryItems.id, item.id), eq(itineraryItems.itineraryId, itineraryId)));
 }
 
 export async function listTenantUsers(tenantId: number) {
@@ -305,4 +312,23 @@ export async function getReportSummary(tenantId: number, start: Date, end: Date)
     db.select({ label: sql<string>`COALESCE(${attendance.residenceState}, 'Não informado')`, value: count() }).from(attendance).where(and(eq(attendance.tenantId, tenantId), gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`)).groupBy(attendance.residenceState).orderBy(desc(count())),
   ]);
   return { places: placesRows[0]?.value ?? 0, events: eventRows[0]?.value ?? 0, attendance: attendanceRows[0]?.value ?? 0, pending: pendingRows[0]?.value ?? 0, origin: originRows };
+}
+
+export async function listActiveTenants() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: tenants.id, name: tenants.name, slug: tenants.slug }).from(tenants).where(eq(tenants.status, "active")).orderBy(asc(tenants.name));
+}
+
+export async function getComparativeReport(tenantIds: number[], start: Date, end: Date) {
+  const db = await getDb();
+  if (!db) return { municipalities: [], events: [], seasonality: [] };
+  const municipalities = [];
+  for (const tenantId of tenantIds) {
+    const tenant = await db.select({ id: tenants.id, name: tenants.name, slug: tenants.slug }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    if (tenant[0]) municipalities.push({ ...tenant[0], ...(await getReportSummary(tenantId, start, end)) });
+  }
+  const eventRows = await db.select({ tenantId: events.tenantId, eventId: events.id, title: events.title, attendance: count(attendance.id) }).from(events).leftJoin(attendance, eq(attendance.eventId, events.id)).where(and(gte(events.startsAt, start), sql`${events.startsAt} <= ${end}`)).groupBy(events.tenantId, events.id, events.title).orderBy(desc(count(attendance.id))).limit(100);
+  const seasonalityRows = await db.select({ month: sql<number>`MONTH(${attendance.createdAt})`, attendance: count() }).from(attendance).where(and(gte(attendance.createdAt, start), sql`${attendance.createdAt} <= ${end}`)).groupBy(sql`MONTH(${attendance.createdAt})`).orderBy(sql`MONTH(${attendance.createdAt})`);
+  return { municipalities, events: eventRows.filter((row) => tenantIds.includes(row.tenantId)), seasonality: seasonalityRows };
 }

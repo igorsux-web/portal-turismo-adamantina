@@ -17,6 +17,7 @@ import {
   getInvitationByToken,
   getQrCode,
   getReportSummary,
+  getComparativeReport,
   getTenantBySlug,
   listAdminEvents,
   listAdminPlaces,
@@ -25,12 +26,14 @@ import {
   listPublishedPlaces,
   listQrCodes,
   listItineraries,
+  listActiveTenants,
   listTenantInvitations,
   listTenantUsers,
   listUpcomingEvents,
   recordAttendance,
   reviewSubmission,
   updateTenantUser,
+  updateItineraryItemPositions,
   updateEvent,
   updatePlace,
 } from "./db";
@@ -39,6 +42,8 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { storagePut } from "./storage";
+import { sendInvitationEmail } from "./email";
+import { ENV } from "./_core/env";
 
 const defaultTenantInput = z.object({ slug: z.string().min(2).max(80).default("adamantina") });
 const statusInput = z.enum(["draft", "pending", "approved", "rejected", "archived"]);
@@ -93,6 +98,7 @@ export const appRouter = router({
     get: publicProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).query(async ({ input }) => { const tenant = await resolveTenant(input.slug); const route = await getItinerary(input.id, tenant.id); if (!route || (route.status !== "published")) throw new TRPCError({ code: "NOT_FOUND", message: "Roteiro não encontrado." }); return route; }),
     mine: protectedProcedure.input(defaultTenantInput).query(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); return listItineraries(tenant.id, ctx.user.id); }),
     create: protectedProcedure.input(defaultTenantInput.extend({ title: z.string().min(2).max(180), description: z.string().max(5000).optional(), status: z.enum(["draft", "published"]).default("draft"), durationMinutes: z.number().int().nonnegative().optional(), distanceKm: z.number().nonnegative().optional(), items: z.array(z.object({ placeId: z.number().int().positive().optional(), eventId: z.number().int().positive().optional(), position: z.number().int().nonnegative(), note: z.string().max(500).optional() })).max(100).default([]) })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const routeId = await createItinerary({ tenantId: tenant.id, ownerId: ctx.user.id, title: input.title, slug: `${input.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, description: input.description, status: input.status, durationMinutes: input.durationMinutes, distanceKm: input.distanceKm?.toString() }); for (const item of input.items) await addItineraryItem({ itineraryId: routeId, placeId: item.placeId, eventId: item.eventId, position: item.position, note: item.note }); return { success: true } as const; }),
+    optimize: protectedProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const route = await getItinerary(input.id, tenant.id); if (!route || (route.ownerId !== ctx.user.id && !["platform_admin", "municipal_admin"].includes(ctx.user.role))) throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode alterar este roteiro." }); const remaining = route.items.filter((item) => item.latitude !== null && item.longitude !== null); const ordered: typeof remaining = []; let current = remaining.shift(); while (current) { ordered.push(current); if (!remaining.length) break; const nextIndex = remaining.reduce((best, item, index) => { const distance = Math.hypot(Number(item.latitude) - Number(current?.latitude), Number(item.longitude) - Number(current?.longitude)); const bestDistance = Math.hypot(Number(remaining[best]?.latitude) - Number(current?.latitude), Number(remaining[best]?.longitude) - Number(current?.longitude)); return distance < bestDistance ? index : best; }, 0); current = remaining.splice(nextIndex, 1)[0]; } await updateItineraryItemPositions(ordered.map((item, position) => ({ id: item.id, position })), route.id); return { success: true, orderedIds: ordered.map((item) => item.id) } as const; }),
   }),
 
   submissions: router({
@@ -129,9 +135,10 @@ export const appRouter = router({
     createOfficialItinerary: municipalAdminProcedure.input(defaultTenantInput.extend({ title: z.string().min(2).max(180), description: z.string().max(5000).optional(), durationMinutes: z.number().int().nonnegative().optional(), distanceKm: z.number().nonnegative().optional(), items: z.array(z.object({ placeId: z.number().int().positive().optional(), eventId: z.number().int().positive().optional(), position: z.number().int().nonnegative(), note: z.string().max(500).optional() })).max(100).default([]) })).mutation(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.slug); const routeId = await createItinerary({ tenantId: tenant.id, title: input.title, slug: `${input.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`, description: input.description, status: "published", durationMinutes: input.durationMinutes, distanceKm: input.distanceKm?.toString() }); for (const item of input.items) await addItineraryItem({ itineraryId: routeId, placeId: item.placeId, eventId: item.eventId, position: item.position, note: item.note }); return { success: true } as const; }),
     users: municipalOwnerProcedure.input(defaultTenantInput).query(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.slug); return listTenantUsers(tenant.id); }),
     updateUser: municipalOwnerProcedure.input(defaultTenantInput.extend({ id: z.number().int().positive(), role: z.enum(["municipal_admin", "moderator", "analyst", "partner"]).optional(), status: z.enum(["active", "invited", "suspended"]).optional() })).mutation(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.slug); await updateTenantUser(input.id, tenant.id, { role: input.role, status: input.status }); return { success: true } as const; }),
-    inviteUser: municipalOwnerProcedure.input(defaultTenantInput.extend({ email: z.string().email(), role: z.enum(["municipal_admin", "moderator", "analyst", "partner"]) })).mutation(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.slug); const token = nanoid(48); const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); await createInvitation({ tenantId: tenant.id, email: input.email, role: input.role, token, invitedBy: ctx.user.id, expiresAt }); return { token, url: `/convites/${token}`, expiresAt }; }),
+    inviteUser: municipalOwnerProcedure.input(defaultTenantInput.extend({ email: z.string().email(), role: z.enum(["municipal_admin", "moderator", "analyst", "partner"]) })).mutation(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.slug); const token = nanoid(48); const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); await createInvitation({ tenantId: tenant.id, email: input.email, role: input.role, token, invitedBy: ctx.user.id, expiresAt }); const path = `/convites/${token}`; const url = `${ENV.publicAppUrl}${path}`; const emailStatus = await sendInvitationEmail({ to: input.email, role: input.role, inviteUrl: url || path, expiresAt }); return { token, url: url || path, expiresAt, emailStatus }; }),
     invitations: municipalOwnerProcedure.input(defaultTenantInput).query(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.slug); return listTenantInvitations(tenant.id); }),
     report: adminProcedure.input(defaultTenantInput.extend({ start: z.coerce.date(), end: z.coerce.date() })).query(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.slug); if (input.end < input.start) throw new TRPCError({ code: "BAD_REQUEST", message: "O período final deve ser posterior ao inicial." }); return { tenant, range: { start: input.start, end: input.end }, summary: await getReportSummary(tenant.id, input.start, input.end) }; }),
+    comparison: adminProcedure.input(z.object({ slug: z.string().default("adamantina"), start: z.coerce.date(), end: z.coerce.date(), tenantIds: z.array(z.number().int().positive()).optional() })).query(async ({ ctx, input }) => { if (input.end < input.start) throw new TRPCError({ code: "BAD_REQUEST", message: "O período final deve ser posterior ao inicial." }); const baseTenant = await ensureTenantAccess(ctx.user, input.slug); const allowedIds = ctx.user.role === "platform_admin" ? (input.tenantIds ?? (await listActiveTenants()).map((tenant) => tenant.id)) : [baseTenant.id]; return { range: { start: input.start, end: input.end }, data: await getComparativeReport(allowedIds, input.start, input.end) }; }),
   }),
 });
 
