@@ -28,7 +28,7 @@ export default function AdminCatalog() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const payload = { slug: slugify(form.name), name: form.name, type: form.type, description: form.description || undefined, address: form.address || undefined, phone: form.phone || undefined, website: form.website || undefined, latitude: form.latitude ? Number(form.latitude) : undefined, longitude: form.longitude ? Number(form.longitude) : undefined, accessibility: form.accessibility || undefined, cadasturNumber: form.cadasturNumber || undefined, status: "approved" as const };
-    if (form.id) await updatePlace.mutateAsync({ id: form.id, ...payload }); else await createPlace.mutateAsync(payload);
+    if (form.id) await updatePlace.mutateAsync({ id: form.id, tenantSlug: "adamantina", ...payload }); else await createPlace.mutateAsync({ tenantSlug: "adamantina", ...payload });
   };
 
   const edit = (place: NonNullable<typeof places>[number]) => { setForm({ id: place.id, name: place.name, type: place.type ?? "", description: place.description ?? "", address: place.address ?? "", phone: place.phone ?? "", website: place.website ?? "", latitude: place.latitude ?? "", longitude: place.longitude ?? "", accessibility: place.accessibility ?? "", cadasturNumber: place.cadasturNumber ?? "" }); setOpen(true); setUploadStatus(""); };
