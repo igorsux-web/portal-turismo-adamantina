@@ -11,6 +11,7 @@ import EventDetail from "@/pages/EventDetail";
 import Events from "@/pages/Events";
 import Account from "@/pages/Account";
 import PersonalItineraryDetail from "@/pages/PersonalItineraryDetail";
+import Privacy from "@/pages/Privacy";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/minha-conta" component={Account} />
       <Route path="/minha-conta/roteiros/:id" component={PersonalItineraryDetail} />
       <Route path="/presenca/:code" component={Attendance} />
+      <Route path="/privacidade" component={Privacy} />
       <Route path="/locais/:id" component={PlaceDetail} />
       <Route path="/eventos" component={Events} />
       <Route path="/eventos/:id" component={EventDetail} />

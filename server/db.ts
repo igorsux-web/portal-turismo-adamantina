@@ -457,24 +457,39 @@ export async function createInvitation(input: typeof invitations.$inferInsert) {
 export async function listTenantInvitations(tenantId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(invitations).where(eq(invitations.tenantId, tenantId)).orderBy(desc(invitations.createdAt));
+  return db.select({ id: invitations.id, tenantId: invitations.tenantId, email: invitations.email, role: invitations.role, invitedBy: invitations.invitedBy, acceptedAt: invitations.acceptedAt, expiresAt: invitations.expiresAt, createdAt: invitations.createdAt }).from(invitations).where(eq(invitations.tenantId, tenantId)).orderBy(desc(invitations.createdAt));
+}
+
+export function hashInvitationToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 export async function getInvitationByToken(token: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(invitations).where(eq(invitations.token, token)).limit(1);
+  const result = await db.select().from(invitations).where(eq(invitations.tokenHash, hashInvitationToken(token))).limit(1);
   return result[0];
 }
 
 export async function acceptInvitation(token: string, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const invitation = await getInvitationByToken(token);
-  if (!invitation || invitation.acceptedAt || invitation.expiresAt < new Date()) throw new Error("Invitation invalid or expired");
-  await db.update(users).set({ tenantId: invitation.tenantId, role: invitation.role, status: "active" }).where(eq(users.id, userId));
-  await db.update(invitations).set({ acceptedAt: new Date() }).where(eq(invitations.id, invitation.id));
-  return invitation;
+  const tokenHash = hashInvitationToken(token);
+  return db.transaction(async (tx) => {
+    const result = await tx.select().from(invitations).where(eq(invitations.tokenHash, tokenHash)).limit(1);
+    const invitation = result[0];
+    const now = new Date();
+    if (!invitation || invitation.acceptedAt || invitation.expiresAt < now) throw new Error("Invitation invalid or expired");
+
+    const invitationUpdate = await tx.update(invitations).set({ acceptedAt: now }).where(and(eq(invitations.id, invitation.id), eq(invitations.tokenHash, tokenHash), sql`${invitations.acceptedAt} IS NULL`, sql`${invitations.expiresAt} > ${now}`));
+    const invitationAffectedRows = Number((invitationUpdate[0] as { affectedRows?: number }).affectedRows ?? 0);
+    if (invitationAffectedRows !== 1) throw new Error("Invitation invalid or expired");
+
+    const userUpdate = await tx.update(users).set({ tenantId: invitation.tenantId, role: invitation.role, status: "active" }).where(eq(users.id, userId));
+    const userAffectedRows = Number((userUpdate[0] as { affectedRows?: number }).affectedRows ?? 0);
+    if (userAffectedRows !== 1) throw new Error("User not found");
+    return invitation;
+  });
 }
 
 export async function getReportSummary(tenantId: number, start: Date, end: Date, eventId?: number) {

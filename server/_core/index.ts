@@ -9,6 +9,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { securityHeaders } from "../security";
+import { requestProtection } from "../requestProtection";
+import { healthHandler } from "../health";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -33,12 +35,15 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   app.disable("x-powered-by");
+  app.set("trust proxy", false);
   app.use(securityHeaders);
   // Uploads are base64-encoded in the tRPC payload; keep protocol overhead bounded.
   app.use(express.json({ limit: "8mb" }));
   app.use(express.urlencoded({ limit: "8mb", extended: true }));
+  app.get("/healthz", healthHandler);
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  app.use(requestProtection);
   // tRPC API
   app.use(
     "/api/trpc",

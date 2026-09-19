@@ -252,7 +252,7 @@ export const invitations = mysqlTable("invitations", {
   tenantId: int("tenantId").notNull(),
   email: varchar("email", { length: 320 }).notNull(),
   role: mysqlEnum("role", ["municipal_admin", "moderator", "analyst", "partner"]).notNull(),
-  token: varchar("token", { length: 96 }).notNull().unique(),
+  tokenHash: varchar("tokenHash", { length: 128 }).notNull().unique(),
   invitedBy: int("invitedBy").notNull(),
   acceptedAt: timestamp("acceptedAt"),
   expiresAt: timestamp("expiresAt").notNull(),
