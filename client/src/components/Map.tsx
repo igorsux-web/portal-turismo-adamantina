@@ -91,22 +91,28 @@ const FORGE_BASE_URL =
   import.meta.env.VITE_FRONTEND_FORGE_API_URL ||
   "https://forge.butterfly-effect.dev";
 const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
+let mapScriptPromise: Promise<void> | null = null;
 
-function loadMapScript() {
-  return new Promise(resolve => {
+function loadMapScript(): Promise<void> {
+  if (window.google?.maps) return Promise.resolve();
+  if (mapScriptPromise) return mapScriptPromise;
+  mapScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>("script[data-manus-google-maps]");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Falha ao carregar o Google Maps.")), { once: true });
+      return;
+    }
     const script = document.createElement("script");
+    script.dataset.manusGoogleMaps = "true";
     script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
     script.async = true;
     script.crossOrigin = "anonymous";
-    script.onload = () => {
-      resolve(null);
-      script.remove(); // Clean up immediately
-    };
-    script.onerror = () => {
-      console.error("Failed to load Google Maps script");
-    };
+    script.onload = () => resolve();
+    script.onerror = () => { mapScriptPromise = null; reject(new Error("Falha ao carregar o Google Maps.")); };
     document.head.appendChild(script);
   });
+  return mapScriptPromise;
 }
 
 interface MapViewProps {
@@ -127,10 +133,19 @@ export function MapView({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
   const markerRefs = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const initialized = useRef(false);
   const [ready, setReady] = useState(false);
 
   const init = usePersistFn(async () => {
-    await loadMapScript();
+    if (initialized.current) return;
+    initialized.current = true;
+    try {
+      await loadMapScript();
+    } catch (error) {
+      initialized.current = false;
+      console.error(error);
+      return;
+    }
     if (!mapContainer.current) {
       console.error("Map container not found");
       return;
