@@ -91,3 +91,12 @@ Coloque um proxy reverso HTTPS (Nginx, Caddy ou load balancer) na frente do Node
 ## Regra de segurança
 
 Nunca envie `.env.local`, `.project-config.json`, dumps de produção ou tokens para o Git. Se alguma credencial real tiver sido compartilhada, revogue-a e gere outra imediatamente.
+
+## Documentos para o próximo agente
+
+Antes de continuar o desenvolvimento, leia nesta ordem:
+
+1. `HANDOFF-PROXIMO-AGENTE.md` — contexto técnico, estado atual, riscos e ordem de trabalho.
+2. `AUDITORIA-FASES-1-7-E-PRONTIDAO-FASE-8.md` — pendências classificadas por prioridade.
+3. `PLANO-CONTINUIDADE-FASES-7.1-10.md` — passo a passo da Fase 7.1 até a homologação.
+4. `FASE-7-SEGURANCA-E-LGPD.md` — baseline de segurança e responsabilidades institucionais.
