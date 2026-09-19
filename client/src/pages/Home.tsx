@@ -82,6 +82,9 @@ export default function Home() {
   })), [eventData]);
   const placeCount = catalogData?.places?.length ?? 0;
   const eventCount = eventData?.events?.length ?? 0;
+  const tenant = catalogData?.tenant;
+  const brandName = tenant?.publicBrandName ?? tenant?.name ?? "Viva Adamantina";
+  const secretariatName = tenant?.responsibleSecretariat ?? "Secretaria de Cultura e Turismo";
   const mapMarkers = useMemo(() => {
     const places = mapFilter === "Eventos" ? [] : (mapData?.places ?? []).map((place) => ({ id: `place-${place.id}`, position: { lat: Number(place.latitude), lng: Number(place.longitude) }, title: place.name }));
     const events = mapFilter === "Locais" ? [] : (mapData?.events ?? []).map((event) => ({ id: `event-${event.id}`, position: { lat: Number(event.latitude), lng: Number(event.longitude) }, title: event.title }));
@@ -101,8 +104,8 @@ export default function Home() {
               <Compass className="h-5 w-5" />
             </div>
             <div className="leading-none">
-              <p className="font-display text-xl font-bold tracking-[-0.04em] text-[#123f36]">Viva Adamantina</p>
-              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#7f918b]">Turismo & cultura</p>
+              <p className="font-display text-xl font-bold tracking-[-0.04em] text-[#123f36]">{brandName}</p>
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#7f918b]">{secretariatName}</p>
             </div>
           </Link>
 

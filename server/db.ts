@@ -139,6 +139,14 @@ export async function getTenantBySlug(slug: string) {
   return result[0];
 }
 
+export async function updateTenantSettings(id: number, input: Partial<typeof tenants.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(tenants).set(input).where(eq(tenants.id, id));
+  const result = await db.select().from(tenants).where(eq(tenants.id, id)).limit(1);
+  return result[0];
+}
+
 export async function getDefaultTenant() {
   return getTenantBySlug("adamantina");
 }

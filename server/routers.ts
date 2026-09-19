@@ -29,6 +29,7 @@ import {
   getReportSummary,
   getComparativeReport,
   getTenantBySlug,
+  updateTenantSettings,
   listAdminEvents,
   listAdminMedia,
   listAdminPlaces,
@@ -90,6 +91,13 @@ const municipalAdminProcedure = adminProcedure.use(({ ctx, next }) => {
 const municipalOwnerProcedure = adminProcedure.use(({ ctx, next }) => {
   if (!["platform_admin", "municipal_admin"].includes(ctx.user.role)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Somente administradores podem gerir usuários municipais." });
+  }
+  return next();
+});
+
+const platformAdminProcedure = adminProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "platform_admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Somente o administrador da plataforma pode alterar configurações municipais." });
   }
   return next();
 });
@@ -179,6 +187,8 @@ export const appRouter = router({
   }),
 
   admin: router({
+    tenantSettings: platformAdminProcedure.input(defaultTenantInput).query(async ({ input }) => resolveTenant(input.slug)),
+    updateTenantSettings: platformAdminProcedure.input(defaultTenantInput.extend({ publicBrandName: z.string().trim().min(2).max(160), responsibleSecretariat: z.string().trim().min(2).max(180), logoUrl: z.string().url().or(z.literal("")).optional(), primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/), secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/), officialDomain: z.string().max(255).optional(), contactEmail: z.string().email().or(z.literal("")).optional(), contactPhone: z.string().max(40).optional(), ombudsmanUrl: z.string().url().or(z.literal("")).optional(), socialLinks: z.string().max(4000).optional() })).mutation(async ({ ctx, input }) => { const tenant = await resolveTenant(input.slug); const { slug: _slug, ...settings } = input; const updated = await updateTenantSettings(tenant.id, settings); await recordAudit({ tenantId: tenant.id, actorId: ctx.user.id, action: "tenant.settings.update", entityType: "tenant", entityId: tenant.id, metadata: { fields: Object.keys(settings) } }); return updated; }),
     places: municipalAdminProcedure.input(defaultTenantInput).query(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.slug); return listAdminPlaces(tenant.id); }),
     createPlace: municipalAdminProcedure.input(tenantScopedInput.merge(placeInput)).mutation(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.tenantSlug); assertCanPublishContent(ctx.user.role, input.status); const { tenantSlug: _tenantSlug, ...payload } = input; const id = await createPlace({ ...payload, latitude: payload.latitude?.toString(), longitude: payload.longitude?.toString(), tenantId: tenant.id, submittedBy: ctx.user.id }); await recordAudit({ tenantId: tenant.id, actorId: ctx.user.id, action: "place.create", entityType: "place", entityId: id, metadata: { status: input.status, categoryId: input.categoryId } }); return { success: true, id } as const; }),
     updatePlace: municipalAdminProcedure.input(tenantScopedInput.extend({ id: z.number().int().positive() }).merge(placeInput.partial())).mutation(async ({ ctx, input }) => { const tenant = await ensureTenantAccess(ctx.user, input.tenantSlug); assertCanPublishContent(ctx.user.role, input.status); const { id, tenantSlug: _tenantSlug, ...payload } = input; await updatePlace(id, tenant.id, { ...payload, latitude: payload.latitude?.toString(), longitude: payload.longitude?.toString() }); await recordAudit({ tenantId: tenant.id, actorId: ctx.user.id, action: "place.update", entityType: "place", entityId: id, metadata: { fields: Object.keys(payload), status: input.status } }); return { success: true } as const; }),

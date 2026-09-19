@@ -57,6 +57,13 @@
       "when": 1789851109262,
       "tag": "0007_aspiring_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1789851335523,
+      "tag": "0008_closed_the_leader",
+      "breakpoints": true
     }
   ]
 }
