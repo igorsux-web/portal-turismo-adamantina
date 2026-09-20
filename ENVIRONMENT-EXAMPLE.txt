@@ -19,6 +19,8 @@ OWNER_NAME=Administrador da plataforma
 PLATFORM_ADMIN_EMAILS=igor.sux@gmail.com
 
 PUBLIC_APP_URL=http://localhost:3000
+# Em homologação/produção, substituir pela URL pública correspondente.
+# PUBLIC_APP_URL=https://portal-turismo-adamantina-six.vercel.app
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=
 

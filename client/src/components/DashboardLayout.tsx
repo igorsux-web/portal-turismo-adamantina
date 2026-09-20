@@ -69,11 +69,11 @@ export default function DashboardLayout({
             </p>
           </div>
           <Button
-            onClick={() => startLogin()}
+            onClick={() => startLogin({ scope: "admin", returnTo: "/admin" })}
             size="lg"
             className="w-full shadow-lg hover:shadow-xl transition-all"
           >
-            Sign in
+            Entrar com minha conta
           </Button>
         </div>
       </div>

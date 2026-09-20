@@ -13,6 +13,7 @@ import {
   placeProfiles,
   placeResponsibles,
   privacyRequests,
+  authTokens,
   qrCodes,
   places,
   reviews,
@@ -95,6 +96,52 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
+export async function createUserWithPassword(input: typeof users.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(users).values(input);
+  const rows = await db.select().from(users).where(eq(users.id, Number(result[0].insertId))).limit(1);
+  if (!rows[0]) throw new Error("User creation failed");
+  return rows[0];
+}
+
+export async function createAuthToken(input: typeof authTokens.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(authTokens).values(input);
+  return Number(result[0].insertId);
+}
+
+export async function getValidAuthToken(tokenHash: string, type: "email_verification" | "password_reset") {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(authTokens).where(and(eq(authTokens.tokenHash, tokenHash), eq(authTokens.type, type))).limit(1);
+  const token = result[0];
+  if (!token || token.usedAt || token.expiresAt.getTime() <= Date.now()) return undefined;
+  return token;
+}
+
+export async function consumeAuthToken(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(authTokens).set({ usedAt: new Date() }).where(eq(authTokens.id, id));
+}
+
+export async function updateUserAuthState(userId: number, input: Partial<typeof users.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(users).set(input).where(eq(users.id, userId));
+  const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return rows[0];
 }
 
 export async function getVisitorProfile(userId: number) {

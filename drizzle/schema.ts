@@ -26,13 +26,27 @@ export const users = mysqlTable("users", {
   tenantId: int("tenantId"),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  passwordHash: text("passwordHash"),
+  emailVerifiedAt: timestamp("emailVerifiedAt"),
+  failedLoginAttempts: int("failedLoginAttempts").default(0).notNull(),
+  lockedUntil: timestamp("lockedUntil"),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "platform_admin", "municipal_admin", "moderator", "analyst", "partner"]).default("user").notNull(),
   status: mysqlEnum("status", ["active", "invited", "suspended"]).default("active").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-}, (table) => ({ tenantIdx: index("users_tenant_idx").on(table.tenantId) }));
+}, (table) => ({ tenantIdx: index("users_tenant_idx").on(table.tenantId), emailIdx: index("users_email_idx").on(table.email) }));
+
+export const authTokens = mysqlTable("authTokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  type: mysqlEnum("type", ["email_verification", "password_reset"]).notNull(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ userTypeIdx: index("auth_tokens_user_type_idx").on(table.userId, table.type) }));
 
 export const visitorProfiles = mysqlTable("visitorProfiles", {
   id: int("id").autoincrement().primaryKey(),

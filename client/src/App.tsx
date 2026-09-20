@@ -12,6 +12,7 @@ import Events from "@/pages/Events";
 import Account from "@/pages/Account";
 import PersonalItineraryDetail from "@/pages/PersonalItineraryDetail";
 import Privacy from "@/pages/Privacy";
+import Auth from "@/pages/Auth";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -22,6 +23,9 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/admin" component={Admin} />
+      <Route path="/login" component={Auth} />
+      <Route path="/verificar-email" component={Auth} />
+      <Route path="/redefinir-senha" component={Auth} />
       <Route path="/minha-conta" component={Account} />
       <Route path="/minha-conta/roteiros/:id" component={PersonalItineraryDetail} />
       <Route path="/presenca/:code" component={Attendance} />

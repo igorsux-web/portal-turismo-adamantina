@@ -2,6 +2,7 @@ import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "../server/_core/oauth";
 import { registerGoogleOAuthRoutes } from "../server/_core/googleOAuth";
+import { registerPasswordAuthRoutes } from "../server/_core/passwordAuth";
 import { registerStorageProxy } from "../server/_core/storageProxy";
 import { createContext } from "../server/_core/context";
 import { securityHeaders } from "../server/security";
@@ -19,6 +20,7 @@ app.get("/healthz", healthHandler);
 registerStorageProxy(app);
 registerOAuthRoutes(app);
 registerGoogleOAuthRoutes(app);
+registerPasswordAuthRoutes(app);
 app.use(requestProtection);
 app.use(
   "/api/trpc",

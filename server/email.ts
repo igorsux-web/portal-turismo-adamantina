@@ -2,6 +2,20 @@ import { ENV } from "./_core/env";
 
 export type InvitationEmailStatus = "sent" | "not_configured" | "failed";
 
+export async function sendAuthEmail(input: { to: string; subject: string; text: string; html: string }): Promise<InvitationEmailStatus> {
+  if (!ENV.resendApiKey || !ENV.resendFromEmail) return "not_configured";
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${ENV.resendApiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: ENV.resendFromEmail, to: [input.to], subject: input.subject, text: input.text, html: input.html }),
+    });
+    return response.ok ? "sent" : "failed";
+  } catch {
+    return "failed";
+  }
+}
+
 export async function sendInvitationEmail(input: { to: string; role: string; inviteUrl: string; expiresAt: Date }): Promise<InvitationEmailStatus> {
   if (!ENV.resendApiKey || !ENV.resendFromEmail) return "not_configured";
   try {
